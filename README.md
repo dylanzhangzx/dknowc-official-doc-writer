@@ -150,4 +150,4 @@ python3 scripts/merge_search_results.py /private/tmp/result_gd.json /private/tmp
 
 ## 版本
 
-当前 GitHub Public 版基于 `3.0.1`。
+当前 GitHub Public 版基于 `3.0.2`。
