@@ -41,6 +41,7 @@ api_key=your_api_key_here
 - 只有用户明确说“直接在对话里给正文”“不要生成 Word”“先看文字草稿”时，才在聊天中输出正文全文。
 - 对长篇正式材料，不得先在对话中发送“正文初稿”“压缩版”“预览版”或完整正文；应直接生成 Word，只给简短说明和文件路径。
 - Markdown 草稿只能作为生成 Word 的内部临时文件；不得向用户展示、链接、发送或要求用户审阅 `.md` 草稿。
+- 生成 Word 时，凡正文超过一行，必须先写入临时 `.txt` 或 `.md` 文件，再把文件路径作为 `scripts/format_document.py` 的输入参数；不得把整篇多行正文直接塞进 `--text` 参数，也不得用临时 Python 脚本直接手写 `python-docx` 生成正式交付文件。
 - 默认只生成普通 Word；只有用户明确说“红头文件”“红头版”“套红头”“生成红头”时，才生成红头文件。
 - 任一关键步骤出现异常时，必须暂停并向用户确认下一步；不得自行跳过搜索、改用 Web 搜索、改写任务目标或继续生成正式结果。
 - 生成前后按任务风险调用 `reference/review_checklist.md`。
@@ -159,8 +160,10 @@ python3 scripts/merge_search_results.py result1.json result2.json --output merge
 普通 Word：
 
 ```bash
-python3 scripts/format_document.py --text "公文内容..." --output ~/.openclaw/data/official-docs/output/文件名.docx
+python3 scripts/format_document.py /tmp/official_doc_content.txt --output ~/.openclaw/data/official-docs/output/文件名.docx
 ```
+
+调用前先把正文写入临时正文文件。只有一句话以内的极短文本才允许使用 `--text`；多行正文不得直接通过命令行参数传入，避免换行被破坏后整篇文档变成一个段落。
 
 红头 Word：
 

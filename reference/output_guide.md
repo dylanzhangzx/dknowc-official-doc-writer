@@ -68,9 +68,11 @@
 
 ```bash
 python3 scripts/format_document.py \
-  --text "公文内容..." \
+  /tmp/official_doc_content.txt \
   --output ~/.openclaw/data/official-docs/output/文件名.docx
 ```
+
+调用前必须先把正文写入临时 `.txt` 或 `.md` 文件，再把文件路径传给脚本。多行正文不得直接放进 `--text` 参数，避免命令行传参破坏换行，导致整篇 Word 被识别成一个段落、标题和正文样式全部错乱。`--text` 只用于一句话以内的极短测试文本。
 
 ### 红头文件命令
 
@@ -96,6 +98,7 @@ python3 scripts/format_document.py \
 - 用户要求 Word 或正式交付时，只返回最终 `.docx` 文件路径和简短说明。
 - 不要同时发送 Markdown 草稿、完整正文、中间文件或搜索结果 JSON。
 - Markdown 草稿属于内部中间文件，只能用于调用 Word 生成脚本；生成后必须继续生成 `.docx`，不得向用户展示、链接、发送或让用户审阅 `.md`。
+- 多行正文必须通过临时正文文件传给 `scripts/format_document.py`；不得把整篇正文直接作为 `--text` 参数，也不得绕过排版脚本用临时 Python 直接手写 `python-docx` 作为正式交付。
 - 除非用户明确要求“先看草稿”“先发 Markdown”“不要生成 Word”，否则不得把 Markdown 草稿作为阶段性交付。
 - 长篇报告、总结、方案、汇报材料、产业研究、政策研究默认直接生成 Word，不在对话中发送正文初稿或完整正文，避免 WebChat 截断。
 - WebChat 场景下避免一次返回多个文件链接；如必须生成多个文件，先交付主 `.docx`，再询问用户是否需要其他文件。

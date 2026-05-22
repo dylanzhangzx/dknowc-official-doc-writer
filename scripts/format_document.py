@@ -337,13 +337,13 @@ def is_signing_entity(line):
     if stripped.endswith('。'):
         return False
     
-    # 排除包含具体场所的（会议室、办公室、服务中心等）
-    exclude_keywords = ['会议室', '办公室', '服务中心', '办事大厅', '窗口']
+    # 排除包含具体场所的（会议室、服务中心等）
+    exclude_keywords = ['会议室', '服务中心', '办事大厅', '窗口']
     if any(kw in stripped for kw in exclude_keywords):
         return False
     
     # 必须以机构名结尾
-    agency_suffixes = ['局', '厅', '委', '办', '中心', '院', '会', '站', '所', '部', '处', '司', '署', '公司', '集团']
+    agency_suffixes = ['局', '厅', '委', '办', '办公室', '中心', '院', '会', '组委会', '协会', '站', '所', '部', '处', '司', '署', '公司', '集团', '单位']
     if not any(stripped.endswith(suffix) for suffix in agency_suffixes):
         return False
     
@@ -356,6 +356,7 @@ def is_date_line(line):
     patterns = [
         r'^\d{4}年(?:\d{1,2}|【[^】]+】)月(?:\d{1,2}|【[^】]+】)日$',
         r'^【[^】]+】年【[^】]+】月【[^】]+】日$',
+        r'^(?:\d{4}|×{4}|XXXX)年(?:\d{1,2}|×{1,2}|XX)月(?:\d{1,2}|×{1,2}|XX)日$',
     ]
     return any(re.match(pattern, stripped) for pattern in patterns)
 
@@ -387,7 +388,19 @@ def should_right_align_date(lines, idx):
 
 def is_contact_info(line):
     """判断是否为联系人信息"""
-    return bool(re.match(r'^（联系人[:：]', line.strip()))
+    return bool(re.match(r'^(?:（?联系人|联系电话|联系人电话|联系方式)[:：]', line.strip()))
+
+
+def normalize_content_text(content_text):
+    """规范输入换行，降低命令行传参导致整篇文本变成一段的风险。"""
+    content_text = content_text.replace('\r\n', '\n').replace('\r', '\n')
+    content_text = content_text.replace('\u2028', '\n').replace('\u2029', '\n')
+
+    # 如果整段文本被转义成了字面量 \n，恢复为真实换行。
+    if '\n' not in content_text and '\\n' in content_text:
+        content_text = content_text.replace('\\n', '\n')
+
+    return content_text
 
 
 def is_recipient(line):
@@ -556,6 +569,7 @@ def create_document(content_text, output_path=None):
     Returns:
         输出文件路径
     """
+    content_text = normalize_content_text(content_text)
     validate_input(content_text)
     content_text = fix_reference_format(content_text)
     
