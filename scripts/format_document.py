@@ -760,6 +760,13 @@ def add_word_table(doc, table_rows, body_font, body_size):
     set_paragraph_format(spacer, first_line_indent=False, line_spacing=body_size + 12)
 
 
+def add_blank_paragraphs(doc, count, line_spacing):
+    """插入指定数量的空段，用于公文固定空行。"""
+    for _ in range(count):
+        para = doc.add_paragraph()
+        set_paragraph_format(para, first_line_indent=False, line_spacing=line_spacing)
+
+
 def create_document(content_text, output_path=None):
     """
     创建排版后的普通公文文档（无红头）
@@ -815,6 +822,8 @@ def create_document(content_text, output_path=None):
     in_kb_section = False
     # 附件正文首页“附件”后的下一行作为附件标题处理
     awaiting_attachment_title = False
+    # 正文末尾附件目录后，落款前需要固定空三行
+    attachment_list_pending_sign_gap = False
 
     while i < line_count:
         line = lines[i]
@@ -838,6 +847,24 @@ def create_document(content_text, output_path=None):
         if line_type == 'empty':
             i += 1
             continue
+
+        if (
+            attachment_list_pending_sign_gap
+            and not is_attachment_line(stripped)
+            and not is_attachment_continuation(stripped)
+        ):
+            if is_signing_entity(stripped):
+                add_blank_paragraphs(doc, 3, body_line_spacing)
+            elif is_date_line(stripped):
+                add_blank_paragraphs(doc, 3, body_line_spacing)
+                para = doc.add_paragraph()
+                para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                add_formatted_text(para, stripped, body_font, body_size)
+                set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.RIGHT, line_spacing=body_line_spacing)
+                attachment_list_pending_sign_gap = False
+                i += 1
+                continue
+            attachment_list_pending_sign_gap = False
 
         if awaiting_attachment_title:
             para = doc.add_paragraph()
@@ -893,6 +920,7 @@ def create_document(content_text, output_path=None):
                 para = doc.add_paragraph()
                 add_formatted_text(para, f"        {stripped}", body_font, body_size)
                 set_attachment_list_format(para, continuation=True, line_spacing=body_line_spacing)
+                attachment_list_pending_sign_gap = True
                 i += 1
                 continue
 
@@ -904,6 +932,7 @@ def create_document(content_text, output_path=None):
             add_formatted_text(para, content, title_font, title_size)
             set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.CENTER, line_spacing=title_line_spacing)
             set_outline_level(para, 0)  # 文档标题设为1级
+            add_blank_paragraphs(doc, 1, body_line_spacing)
             i += 1
             continue
 
@@ -939,9 +968,11 @@ def create_document(content_text, output_path=None):
 
         # 附件
         if is_attachment_line(stripped):
+            add_blank_paragraphs(doc, 1, body_line_spacing)
             para = doc.add_paragraph()
             add_formatted_text(para, stripped, body_font, body_size)
             set_attachment_list_format(para, continuation=False, line_spacing=body_line_spacing)
+            attachment_list_pending_sign_gap = True
             i += 1
             continue
 
