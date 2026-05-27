@@ -3,27 +3,34 @@
   "$comment": "广东省政务服务和数据管理局公文格式标准（试行）",
   
   "page": {
+    "paper": "A4",
+    "width_mm": 210,
+    "height_mm": 297,
     "margin_top_mm": 37,
-    "margin_bottom_mm": 35,
+    "margin_bottom_mm": 33,
     "margin_left_mm": 28,
     "margin_right_mm": 26,
-    "$comment": "页边距：GB/T 9704 国标（上37mm 下35mm 左28mm 右26mm）"
+    "$comment": "页面：A4；页边距按规范（上37mm 下33mm 左28mm 右26mm）"
   },
   
   "title": {
     "font": "方正小标宋简体",
     "size_pt": 22,
+    "line_spacing_pt": 33,
     "alignment": "center",
-    "$comment": "标题：二号字，居中"
+    "$comment": "标题：二号字，居中，固定行距33磅"
   },
   
   "body": {
     "font": "仿宋_GB2312",
+    "latin_font": "Times New Roman",
     "size_pt": 16,
     "line_spacing_pt": 28,
     "first_line_indent_chars": 2,
     "alignment": "justify",
-    "$comment": "正文：三号字，首行缩进2字符，两端对齐，行距28磅"
+    "space_before_pt": 0,
+    "space_after_pt": 0,
+    "$comment": "正文：三号字，首行缩进2字符，两端对齐，行距28磅，段前段后0；数字和字母使用 Times New Roman"
   },
   
   "heading1": {
@@ -56,6 +63,21 @@
     "size_pt": 16,
     "first_line_indent": false,
     "$comment": "附件：三号字，无缩进"
+  },
+
+  "attachment_section": {
+    "font": "黑体",
+    "size_pt": 16,
+    "alignment": "left",
+    "$comment": "附件页标识：黑体，三号，左对齐"
+  },
+
+  "attachment_title": {
+    "font": "方正小标宋简体",
+    "size_pt": 22,
+    "line_spacing_pt": 33,
+    "alignment": "center",
+    "$comment": "附件标题：二号字，居中"
   },
   
   "signing_entity": {

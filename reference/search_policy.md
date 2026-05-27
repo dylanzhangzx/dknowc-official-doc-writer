@@ -149,6 +149,8 @@ python3 scripts/merge_search_results.py result1.json result2.json --output merge
 
 搜索结果必须分类，不要把原始素材直接丢进正文生成。
 
+分类后，必须继续按 `reference/material_usage_guidance.md` 判断材料如何进入正文。四分类解决“材料是什么”，材料使用指导解决“材料怎么用”；不得跳过这一层，直接拼接搜索摘要。
+
 | 素材类型 | 允许的来源 | 用途 |
 | --- | --- | --- |
 | 政策依据型 | 仅国家级和本省 | 支撑正文政策依据、合法性、必要性 |
@@ -201,6 +203,7 @@ python3 scripts/merge_search_results.py result1.json result2.json --output merge
 - 每类素材标注用途：`→ 用于：正文某部分`
 - 写作素材和参考范文分开
 - 表述参考只说明风格用途，不列入正文末尾素材清单
+- 按 `reference/material_usage_guidance.md` 检查地域、时间、政策效力和数据口径风险
 
 执行过搜索的文档，正文末尾必须包含：
 

@@ -20,8 +20,8 @@ from pathlib import Path
 import docx
 import docx.opc.constants
 from docx.enum.text import WD_BREAK
-from docx.shared import Pt, Cm, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Pt, Cm, Mm, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
@@ -88,6 +88,7 @@ DEFAULT_ORG = "广东省政务服务和数据管理局"
 DEFAULT_DOC_PREFIX = "粤政数"
 OUTPUT_DIR = os.path.expanduser("~/.openclaw/data/official-docs/output")
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'format.json')
+AI_DISCLAIMER_TEXT = "【AI生成提示】内容由AI生成，内容仅供参考。"
 
 
 def load_format_config():
@@ -136,14 +137,34 @@ def get_page_margin():
         if 'margin_top_mm' in page:
             return (
                 page.get('margin_top_mm', 37),
-                page.get('margin_bottom_mm', 35),
+                page.get('margin_bottom_mm', 33),
                 page.get('margin_left_mm', 28),
                 page.get('margin_right_mm', 26),
             )
         # 兼容旧配置：统一边距
         unified = page.get('margin_mm', 25)
         return (unified, unified, unified, unified)
-    return (37, 35, 28, 26)
+    return (37, 33, 28, 26)
+
+
+def get_page_size():
+    """从配置获取纸张尺寸，默认 A4。"""
+    if FORMAT_CONFIG and 'page' in FORMAT_CONFIG:
+        page = FORMAT_CONFIG['page']
+        return (
+            page.get('width_mm', 210),
+            page.get('height_mm', 297),
+        )
+    return (210, 297)
+
+
+def get_latin_font_config():
+    """获取全文数字和字母字体。"""
+    if FORMAT_CONFIG:
+        body = FORMAT_CONFIG.get('body', {})
+        if body.get('latin_font'):
+            return body['latin_font']
+    return 'Times New Roman'
 
 MAX_INPUT_LENGTH = 50000
 MAX_INPUT_LINES = 2000
@@ -197,8 +218,8 @@ def get_next_version(output_path: str) -> str:
 
 try:
     from docx import Document
-    from docx.shared import Pt, Cm, RGBColor
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt, Cm, Mm, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
 except ImportError:
@@ -206,14 +227,41 @@ except ImportError:
     sys.exit(1)
 
 
-def set_run_font(run, font_name, font_size, bold=False, color=None):
+def set_run_font(run, font_name, font_size, bold=False, color=None, latin_font=None, latin=False):
     """设置字体"""
-    run.font.name = font_name
+    latin_font = latin_font or get_latin_font_config()
+    display_font = latin_font if latin else font_name
+    run.font.name = display_font
     run.font.size = Pt(font_size)
     run.font.bold = bold
     if color:
         run.font.color.rgb = color
-    run._element.rPr.rFonts.set(qn('w:eastAsia'), font_name)
+    rPr = run._element.get_or_add_rPr()
+    rFonts = rPr.rFonts
+    if rFonts is None:
+        rFonts = OxmlElement('w:rFonts')
+        rPr.append(rFonts)
+    rFonts.set(qn('w:eastAsia'), font_name)
+    rFonts.set(qn('w:ascii'), display_font)
+    rFonts.set(qn('w:hAnsi'), display_font)
+    rFonts.set(qn('w:cs'), display_font)
+
+
+def add_formatted_text(paragraph, text, font_name, font_size, bold=False, color=None):
+    """添加文本并确保数字、字母使用 Times New Roman。"""
+    latin_font = get_latin_font_config()
+    for segment in re.findall(r'[A-Za-z0-9]+|[^A-Za-z0-9]+', text):
+        run = paragraph.add_run(segment)
+        set_run_font(
+            run,
+            font_name,
+            font_size,
+            bold=bold,
+            color=color,
+            latin_font=latin_font,
+            latin=bool(re.fullmatch(r'[A-Za-z0-9]+', segment)),
+        )
+    return paragraph
 
 
 def set_paragraph_format(para, first_line_indent=False, indent_chars=None, alignment=None, line_spacing=None):
@@ -227,21 +275,28 @@ def set_paragraph_format(para, first_line_indent=False, indent_chars=None, align
         line_spacing: 行距（磅）
     """
     if indent_chars:
+        # 同时写入常规缩进，兼容只读取 first_line_indent 的校验器。
+        para.paragraph_format.first_line_indent = Cm(0.37 * indent_chars)
         # 使用Word的字符单位缩进（更准确）
         # 通过底层XML设置 w:firstLineChars 属性
         # 值的单位是1/100字符，所以2字符 = 200
         pPr = para._p.get_or_add_pPr()
-        ind = OxmlElement('w:ind')
+        ind = pPr.ind
+        if ind is None:
+            ind = OxmlElement('w:ind')
+            pPr.append(ind)
         ind.set(qn('w:firstLineChars'), str(int(indent_chars * 100)))
-        pPr.append(ind)
     elif first_line_indent:
         # 兼容旧配置
         indent_cm = FORMAT_CONFIG['body']['first_line_indent_cm'] if FORMAT_CONFIG else 0.74
         para.paragraph_format.first_line_indent = Cm(indent_cm)
     if alignment is not None:
         para.alignment = alignment
+    para.paragraph_format.space_before = Pt(0)
+    para.paragraph_format.space_after = Pt(0)
     if line_spacing:
         para.paragraph_format.line_spacing = Pt(line_spacing)
+        para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
 
 
 def set_outline_level(para, level):
@@ -262,6 +317,48 @@ def set_outline_level(para, level):
     pPr.append(outlineLvl)
 
 
+def add_center_page_number(section):
+    """在页脚居中添加页码。"""
+    footer = section.footer
+    para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = para.add_run()
+    set_run_font(run, '宋体', 14)
+
+    fld_begin = OxmlElement('w:fldChar')
+    fld_begin.set(qn('w:fldCharType'), 'begin')
+    instr_text = OxmlElement('w:instrText')
+    instr_text.set(qn('xml:space'), 'preserve')
+    instr_text.text = 'PAGE'
+    fld_separate = OxmlElement('w:fldChar')
+    fld_separate.set(qn('w:fldCharType'), 'separate')
+    text = OxmlElement('w:t')
+    text.text = '1'
+    fld_end = OxmlElement('w:fldChar')
+    fld_end.set(qn('w:fldCharType'), 'end')
+
+    run._r.append(fld_begin)
+    run._r.append(instr_text)
+    run._r.append(fld_separate)
+    run._r.append(text)
+    run._r.append(fld_end)
+
+
+def add_ai_disclaimer(doc):
+    """在文档最末尾添加 AI 生成提示。"""
+    if doc.paragraphs and doc.paragraphs[-1].text.strip() == AI_DISCLAIMER_TEXT:
+        return
+
+    para = doc.add_paragraph()
+    para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    para.paragraph_format.space_before = Pt(0)
+    para.paragraph_format.space_after = Pt(0)
+    para.paragraph_format.line_spacing = Pt(18)
+    para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+
+    add_formatted_text(para, AI_DISCLAIMER_TEXT, '仿宋_GB2312', 10.5, color=RGBColor(0x80, 0x80, 0x80))
+
+
 def get_line_type(line):
     """
     根据Markdown结构判断行类型
@@ -280,14 +377,21 @@ def get_line_type(line):
     if not stripped:
         return 'empty'
     
-    # Markdown标题结构
-    if stripped.startswith('# ') and not stripped.startswith('## '):
-        return 'title'
-    if stripped.startswith('## '):
-        return 'heading1'
+    if stripped.startswith('#### '):
+        return 'heading3'
     if stripped.startswith('### '):
         return 'heading2'
-    if stripped.startswith('#### '):
+    if stripped.startswith('## '):
+        return 'heading1'
+    if stripped.startswith('# ') and not stripped.startswith('## '):
+        return 'title'
+
+    # 兼容模型未加 Markdown 标记但使用公文常见标题格式的情况。
+    if re.match(r'^[一二三四五六七八九十]+、[^。；;]{1,40}$', stripped):
+        return 'heading1'
+    if re.match(r'^（[一二三四五六七八九十]+）[^。；;]{1,40}$', stripped):
+        return 'heading2'
+    if re.match(r'^\d+[\.．、][^。；;]{1,40}$', stripped):
         return 'heading3'
     
     return 'text'
@@ -296,15 +400,36 @@ def get_line_type(line):
 def strip_markdown_heading(line):
     """去掉Markdown标题标记"""
     stripped = line.strip()
-    if stripped.startswith('# ') and not stripped.startswith('## '):
-        return stripped[2:]
-    if stripped.startswith('## '):
-        return stripped[3:]
-    if stripped.startswith('### '):
-        return stripped[4:]
     if stripped.startswith('#### '):
         return stripped[5:]
+    if stripped.startswith('### '):
+        return stripped[4:]
+    if stripped.startswith('## '):
+        return stripped[3:]
+    if stripped.startswith('# ') and not stripped.startswith('## '):
+        return stripped[2:]
     return stripped
+
+
+def has_markdown_title(lines):
+    """判断正文是否已经包含 Markdown 公文标题。"""
+    return any(get_line_type(line.strip()) == 'title' for line in lines)
+
+
+def infer_title_from_output_path(output_path):
+    """当正文遗漏 # 标题时，从输出文件名推断公文标题。"""
+    if not output_path:
+        return None
+    stem = Path(os.path.expanduser(output_path)).stem.strip()
+    if not stem:
+        return None
+    stem = re.sub(r'_v\d+$', '', stem)
+    stem = re.sub(r'_红头$', '', stem)
+    if re.match(r'^公文_\d{8}_\d{6}$', stem):
+        return None
+    if len(stem) < 4 or len(stem) > 80:
+        return None
+    return stem
 
 
 def strip_markdown_bold(text):
@@ -317,6 +442,47 @@ def strip_markdown_bold(text):
 def is_attachment_line(line):
     """判断是否为附件行"""
     return bool(re.match(r'^附件[:：]', line.strip()))
+
+
+def is_attachment_continuation(line):
+    """判断是否为附件清单续行，如 2.×××。"""
+    return bool(re.match(r'^\d+[\.．、]', line.strip()))
+
+
+def set_attachment_list_format(para, continuation=False, line_spacing=None):
+    """设置正文末尾附件说明格式。"""
+    pPr = para._p.get_or_add_pPr()
+    ind = pPr.ind
+    if ind is None:
+        ind = OxmlElement('w:ind')
+        pPr.append(ind)
+    ind.set(qn('w:start'), "0")
+    ind.set(qn('w:startChars'), "0")
+    ind.set(qn('w:end'), "0")
+    ind.set(qn('w:endChars'), "0")
+    if continuation:
+        para.paragraph_format.left_indent = Cm(0)
+        para.paragraph_format.first_line_indent = None
+        ind.set(qn('w:firstLineChars'), "112")
+    else:
+        para.paragraph_format.first_line_indent = Cm(0.74)
+        ind.set(qn('w:firstLineChars'), "200")
+    para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    para.paragraph_format.space_before = Pt(0)
+    para.paragraph_format.space_after = Pt(0)
+    if line_spacing:
+        para.paragraph_format.line_spacing = Pt(line_spacing)
+        para.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+
+
+def is_attachment_section_title(line):
+    """判断附件正文首页标题。"""
+    return line.strip() == "附件"
+
+
+def document_has_visible_content(doc):
+    """判断文档中是否已经有正文内容，用于附件页前分页。"""
+    return any(paragraph.text.strip() for paragraph in doc.paragraphs)
 
 
 def is_signing_entity(line):
@@ -352,7 +518,7 @@ def is_signing_entity(line):
 
 def is_date_line(line):
     """判断是否为公文落款日期。"""
-    stripped = line.strip()
+    stripped = re.sub(r'\s+', '', line.strip())
     patterns = [
         r'^\d{4}年(?:\d{1,2}|【[^】]+】)月(?:\d{1,2}|【[^】]+】)日$',
         r'^【[^】]+】年【[^】]+】月【[^】]+】日$',
@@ -393,6 +559,7 @@ def is_contact_info(line):
 
 def normalize_content_text(content_text):
     """规范输入换行，降低命令行传参导致整篇文本变成一段的风险。"""
+    content_text = content_text.replace('\ufeff', '')
     content_text = content_text.replace('\r\n', '\n').replace('\r', '\n')
     content_text = content_text.replace('\u2028', '\n').replace('\u2029', '\n')
 
@@ -401,6 +568,39 @@ def normalize_content_text(content_text):
         content_text = content_text.replace('\\n', '\n')
 
     return content_text
+
+
+def is_plain_document_title(line):
+    """判断无 Markdown 标记时首个非空行是否像公文标题。"""
+    stripped = line.strip()
+    if not stripped or len(stripped) > 80:
+        return False
+    if stripped.endswith(('。', '；', ';', '：', ':')):
+        return False
+    title_suffixes = ('通知', '报告', '请示', '批复', '函', '意见', '方案', '总结', '纪要', '倡议书')
+    return stripped.endswith(title_suffixes)
+
+
+def promote_plain_title(lines):
+    """没有 # 标题时，将首个疑似公文标题的非空行提升为标题。"""
+    for idx, line in enumerate(lines):
+        if not line.strip():
+            continue
+        if is_plain_document_title(line):
+            lines[idx] = f"# {line.strip()}"
+        return lines
+    return lines
+
+
+def is_legacy_ai_disclaimer(line):
+    """过滤模型自行追加的旧版 AI 提示，统一由脚本在末尾生成规范提示。"""
+    stripped = line.strip()
+    return stripped in {
+        "---",
+        "内容由AI生成，仅供参考",
+        "内容由 AI 生成，仅供参考",
+        AI_DISCLAIMER_TEXT,
+    }
 
 
 def is_recipient(line):
@@ -416,18 +616,7 @@ def is_recipient(line):
     # 必须以冒号结尾
     if not stripped.endswith('：') and not stripped.endswith(':'):
         return False
-    
-    # 包含主送机关关键词
-    keywords = ['政府', '厅', '局', '委', '办公室', '机构', '中心', '公司', '集团']
-    has_keyword = any(kw in stripped for kw in keywords)
-    
-    if not has_keyword:
-        return False
-    
-    # 排除过长的句子（主送机关通常不超过50字）
-    if len(stripped) > 50:
-        return False
-    
+
     # 排除明显不是主送机关的句子
     # 如："现就...通知如下："、"特此通知："等
     exclude_patterns = [
@@ -441,6 +630,21 @@ def is_recipient(line):
         r'请示如下：?$',
     ]
     if any(re.search(p, stripped) for p in exclude_patterns):
+        return False
+
+    # 占位示例或短主送机关也应识别，如“×××：”
+    if len(stripped) <= 30:
+        return True
+
+    # 包含主送机关关键词
+    keywords = ['政府', '厅', '局', '委', '办公室', '机构', '中心', '公司', '集团']
+    has_keyword = any(kw in stripped for kw in keywords)
+    
+    if not has_keyword:
+        return False
+    
+    # 排除过长的句子（主送机关通常不超过50字）
+    if len(stripped) > 50:
         return False
     
     return True
@@ -548,14 +752,12 @@ def add_word_table(doc, table_rows, body_font, body_size):
             # 清空默认段落
             cell.paragraphs[0].clear()
             text = row_data[col_idx] if col_idx < len(row_data) else ''
-            run = cell.paragraphs[0].add_run(text)
-            run.font.name = body_font
-            run.font.size = Pt(body_size)
-            run.font.bold = (row_idx == 0)  # 表头加粗
-            run._element.rPr.rFonts.set(qn('w:eastAsia'), body_font)
+            add_formatted_text(cell.paragraphs[0], text, body_font, body_size, bold=(row_idx == 0))
+            set_paragraph_format(cell.paragraphs[0], first_line_indent=False, line_spacing=body_size + 12)
     
     # 表格后加一个空段落，与后续内容保持间距
-    doc.add_paragraph()
+    spacer = doc.add_paragraph()
+    set_paragraph_format(spacer, first_line_indent=False, line_spacing=body_size + 12)
 
 
 def create_document(content_text, output_path=None):
@@ -575,21 +777,32 @@ def create_document(content_text, output_path=None):
     
     doc = Document()
     
-    # 设置页边距（GB/T 9704 国标）
+    # 设置 A4 纸张和页边距（公文格式规范）
+    page_width_mm, page_height_mm = get_page_size()
     margin_top, margin_bottom, margin_left, margin_right = get_page_margin()
     for section in doc.sections:
+        section.page_width = Mm(page_width_mm)
+        section.page_height = Mm(page_height_mm)
         section.top_margin = Cm(margin_top / 10)
         section.bottom_margin = Cm(margin_bottom / 10)
         section.left_margin = Cm(margin_left / 10)
         section.right_margin = Cm(margin_right / 10)
+        add_center_page_number(section)
     
     # 处理正文内容
     lines = content_text.strip().split('\n')
+    if not has_markdown_title(lines):
+        inferred_title = infer_title_from_output_path(output_path)
+        before = list(lines)
+        lines = promote_plain_title(lines)
+        if before == lines and inferred_title:
+            lines = [f"# {inferred_title}", ""] + lines
     i = 0
     line_count = len(lines)
     
     # 从配置获取字体信息
     title_font, title_size, _ = get_font_config('title')
+    title_line_spacing = FORMAT_CONFIG['title'].get('line_spacing_pt', 33) if FORMAT_CONFIG and 'title' in FORMAT_CONFIG else 33
     body_font, body_size, _ = get_font_config('body')
     h1_font, h1_size, _ = get_font_config('heading1')
     h2_font, h2_size, _ = get_font_config('heading2')
@@ -600,11 +813,17 @@ def create_document(content_text, output_path=None):
     in_appendix_section = False
     # 知识专库链接区域标志：URL 生成可点击蓝链
     in_kb_section = False
+    # 附件正文首页“附件”后的下一行作为附件标题处理
+    awaiting_attachment_title = False
 
     while i < line_count:
         line = lines[i]
         stripped = line.strip()
         line_type = get_line_type(stripped)
+
+        if is_legacy_ai_disclaimer(stripped):
+            i += 1
+            continue
 
         # Markdown表格检测（必须在其他判断之前）
         if stripped.startswith('|'):
@@ -620,13 +839,22 @@ def create_document(content_text, output_path=None):
             i += 1
             continue
 
+        if awaiting_attachment_title:
+            para = doc.add_paragraph()
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            add_formatted_text(para, stripped, title_font, title_size)
+            set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.CENTER, line_spacing=title_line_spacing)
+            set_outline_level(para, 0)
+            awaiting_attachment_title = False
+            i += 1
+            continue
+
         marker_text = strip_markdown_heading(stripped)
         if marker_text in ("素材使用情况", "参考资料", "参考来源"):
             in_appendix_section = True
             para = doc.add_paragraph()
             label = "【素材使用情况】" if marker_text == "素材使用情况" else f"【{marker_text}】"
-            run = para.add_run(label)
-            set_run_font(run, body_font, body_size)
+            add_formatted_text(para, label, body_font, body_size)
             set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.LEFT, line_spacing=body_line_spacing)
             i += 1
             continue
@@ -635,8 +863,7 @@ def create_document(content_text, output_path=None):
             in_appendix_section = True
             in_kb_section = True
             para = doc.add_paragraph()
-            run = para.add_run("【知识专库链接】")
-            set_run_font(run, body_font, body_size)
+            add_formatted_text(para, "【知识专库链接】", body_font, body_size)
             set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.LEFT, line_spacing=body_line_spacing)
             i += 1
             continue
@@ -655,14 +882,27 @@ def create_document(content_text, output_path=None):
             in_appendix_section = True
             in_kb_section = True
 
+        # 附件清单续行要先于三级标题识别，避免 “2.附件名” 被误判为三级标题。
+        if i > 0 and is_attachment_continuation(stripped):
+            prev_non_empty = ""
+            for prev_idx in range(i - 1, -1, -1):
+                prev_non_empty = lines[prev_idx].strip()
+                if prev_non_empty:
+                    break
+            if is_attachment_line(prev_non_empty) or is_attachment_continuation(prev_non_empty):
+                para = doc.add_paragraph()
+                add_formatted_text(para, f"        {stripped}", body_font, body_size)
+                set_attachment_list_format(para, continuation=True, line_spacing=body_line_spacing)
+                i += 1
+                continue
+
         # 公文标题（# 标题）
         if line_type == 'title':
             content = strip_markdown_heading(stripped)
             para = doc.add_paragraph()
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            run = para.add_run(content)
-            set_run_font(run, title_font, title_size)
-            set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.CENTER)
+            add_formatted_text(para, content, title_font, title_size)
+            set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.CENTER, line_spacing=title_line_spacing)
             set_outline_level(para, 0)  # 文档标题设为1级
             i += 1
             continue
@@ -671,9 +911,8 @@ def create_document(content_text, output_path=None):
         if line_type == 'heading1':
             content = strip_markdown_heading(stripped)
             para = doc.add_paragraph()
-            run = para.add_run(content)
-            set_run_font(run, h1_font, h1_size)
-            set_paragraph_format(para, indent_chars=2)
+            add_formatted_text(para, content, h1_font, h1_size)
+            set_paragraph_format(para, indent_chars=2, line_spacing=body_line_spacing)
             set_outline_level(para, 1)  # 一级标题设为2级
             i += 1
             continue
@@ -682,9 +921,8 @@ def create_document(content_text, output_path=None):
         if line_type == 'heading2':
             content = strip_markdown_heading(stripped)
             para = doc.add_paragraph()
-            run = para.add_run(content)
-            set_run_font(run, h2_font, h2_size)
-            set_paragraph_format(para, indent_chars=2)
+            add_formatted_text(para, content, h2_font, h2_size)
+            set_paragraph_format(para, indent_chars=2, line_spacing=body_line_spacing)
             set_outline_level(para, 2)  # 二级标题设为3级
             i += 1
             continue
@@ -693,9 +931,8 @@ def create_document(content_text, output_path=None):
         if line_type == 'heading3':
             content = strip_markdown_heading(stripped)
             para = doc.add_paragraph()
-            run = para.add_run(content)
-            set_run_font(run, h3_font, h3_size, bold=h3_bold)
-            set_paragraph_format(para, indent_chars=2)
+            add_formatted_text(para, content, h3_font, h3_size, bold=h3_bold)
+            set_paragraph_format(para, indent_chars=2, line_spacing=body_line_spacing)
             set_outline_level(para, 3)  # 三级标题设为4级
             i += 1
             continue
@@ -703,9 +940,21 @@ def create_document(content_text, output_path=None):
         # 附件
         if is_attachment_line(stripped):
             para = doc.add_paragraph()
-            run = para.add_run(stripped)
-            set_run_font(run, body_font, body_size)
-            set_paragraph_format(para, first_line_indent=False)
+            add_formatted_text(para, stripped, body_font, body_size)
+            set_attachment_list_format(para, continuation=False, line_spacing=body_line_spacing)
+            i += 1
+            continue
+
+        if is_attachment_section_title(stripped):
+            if document_has_visible_content(doc):
+                page_break_para = doc.add_paragraph()
+                page_break_run = page_break_para.add_run()
+                page_break_run.add_break(WD_BREAK.PAGE)
+                set_paragraph_format(page_break_para, first_line_indent=False, line_spacing=body_line_spacing)
+            para = doc.add_paragraph()
+            add_formatted_text(para, stripped, h1_font, h1_size)
+            set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.LEFT, line_spacing=body_line_spacing)
+            awaiting_attachment_title = True
             i += 1
             continue
 
@@ -713,8 +962,8 @@ def create_document(content_text, output_path=None):
         if is_signing_entity(stripped):
             para = doc.add_paragraph()
             para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            run = para.add_run(stripped)
-            set_run_font(run, body_font, body_size)
+            add_formatted_text(para, stripped, body_font, body_size)
+            set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.RIGHT, line_spacing=body_line_spacing)
             i += 1
             continue
 
@@ -722,8 +971,8 @@ def create_document(content_text, output_path=None):
         if is_contact_info(stripped):
             para = doc.add_paragraph()
             para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            run = para.add_run(stripped)
-            set_run_font(run, body_font, body_size)
+            add_formatted_text(para, stripped, body_font, body_size)
+            set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.RIGHT, line_spacing=body_line_spacing)
             i += 1
             continue
 
@@ -731,8 +980,8 @@ def create_document(content_text, output_path=None):
         if should_right_align_date(lines, i):
             para = doc.add_paragraph()
             para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            run = para.add_run(stripped)
-            set_run_font(run, body_font, body_size)
+            add_formatted_text(para, stripped, body_font, body_size)
+            set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.RIGHT, line_spacing=body_line_spacing)
             i += 1
             continue
 
@@ -747,9 +996,8 @@ def create_document(content_text, output_path=None):
         # 主送机关（前10行内）
         if is_recipient(stripped) and i < 10:
             para = doc.add_paragraph()
-            run = para.add_run(stripped)
-            set_run_font(run, body_font, body_size)
-            set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.LEFT)
+            add_formatted_text(para, stripped, body_font, body_size)
+            set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.LEFT, line_spacing=body_line_spacing)
             i += 1
             continue
 
@@ -770,8 +1018,7 @@ def create_document(content_text, output_path=None):
 
             para = doc.add_paragraph()
             clean_text = strip_markdown_bold(stripped)
-            run = para.add_run(clean_text)
-            set_run_font(run, body_font, body_size)
+            add_formatted_text(para, clean_text, body_font, body_size)
             set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.LEFT, line_spacing=body_line_spacing)
             i += 1
             continue
@@ -795,8 +1042,7 @@ def create_document(content_text, output_path=None):
             # 非URL行（标签、标题等）：靠左排版，不缩进
             para = doc.add_paragraph()
             clean_text = strip_markdown_bold(stripped)
-            run = para.add_run(clean_text)
-            set_run_font(run, body_font, body_size)
+            add_formatted_text(para, clean_text, body_font, body_size)
             set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.LEFT, line_spacing=body_line_spacing)
             i += 1
             continue
@@ -805,8 +1051,7 @@ def create_document(content_text, output_path=None):
         # 清理Markdown加粗标记
         clean_text = strip_markdown_bold(stripped)
         para = doc.add_paragraph()
-        run = para.add_run(clean_text)
-        set_run_font(run, body_font, body_size)
+        add_formatted_text(para, clean_text, body_font, body_size)
         set_paragraph_format(para, indent_chars=2, alignment=WD_ALIGN_PARAGRAPH.JUSTIFY, line_spacing=body_line_spacing)
         i += 1
     
@@ -825,6 +1070,7 @@ def create_document(content_text, output_path=None):
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
 
+    add_ai_disclaimer(doc)
     doc.save(output_path)
     return output_path
 

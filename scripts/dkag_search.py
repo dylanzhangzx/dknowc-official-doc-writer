@@ -30,9 +30,7 @@ QUERY_TOO_SHORT_ERROR = f"错误：查询关键词过短，最少需要 {MIN_QUE
 
 # 默认配置文件路径
 CONFIG_FILE = Path(__file__).parent.parent / "config.ini"
-# 固定基础 URL（新接口格式）
-FIXED_BASE_URL = "https://open.dknowc.cn/dependable/search/"
-REGISTER_URL = "https://platform.dknowc.cn/"
+DEFAULT_BASE_URL = "https://open.dknowc.cn/dependable/search/"
 FIXED_SEGMENT_COUNT = 2
 FIXED_SIMPLIFIED = False
 
@@ -53,42 +51,60 @@ def normalize_time_filter(time: Optional[str]) -> Optional[str]:
     return value
 
 
-def load_config(config_path: Optional[Path] = None) -> str:
+def normalize_base_url(base_url: str) -> str:
+    """规范化搜索接口地址。"""
+    base_url = (base_url or DEFAULT_BASE_URL).strip()
+    if not base_url:
+        return DEFAULT_BASE_URL
+    if not base_url.endswith("/"):
+        base_url += "/"
+    return base_url
+
+
+def load_config(config_path: Optional[Path] = None) -> dict:
     """
-    从配置文件加载 API Key
+    从配置文件加载 API Key 和接口地址
 
     配置文件格式 (config.ini):
     [dkag]
     api_key=your_api_key_here
+    base_url=https://open.dknowc.cn/dependable/search/
     """
     config_path = config_path or CONFIG_FILE
 
     if not config_path.exists():
         raise FileNotFoundError(
             f"配置文件不存在: {config_path}\n"
-            f"请先访问 {REGISTER_URL} 获取深知可信搜索 API Key。\n"
             f"请创建配置文件并添加你的 API Key:\n"
             f"  [dkag]\n"
-            f"  api_key=your_api_key_here"
+            f"  api_key=your_api_key_here\n"
+            f"  base_url={DEFAULT_BASE_URL}"
         )
 
     api_key = ''
+    base_url = DEFAULT_BASE_URL
     try:
         import configparser
         config = configparser.ConfigParser()
         config.read(config_path, encoding='utf-8')
         api_key = config.get('dkag', 'api_key', fallback='')
+        base_url = config.get('dkag', 'base_url', fallback=DEFAULT_BASE_URL)
     except Exception:
         # 简单的文件读取方式（兼容无 configparser 的情况）
         with open(config_path, 'r', encoding='utf-8') as f:
             for line in f:
                 if line.startswith('api_key='):
                     api_key = line.split('=', 1)[1].strip()
+                if line.startswith('base_url='):
+                    base_url = line.split('=', 1)[1].strip()
 
     if not api_key:
-        raise ValueError(f"API Key 为空，请先访问 {REGISTER_URL} 获取 API Key，并在配置文件中设置有效的 api_key")
+        raise ValueError("API Key 为空，请在配置文件中设置有效的 api_key")
     
-    return api_key
+    return {
+        "api_key": api_key,
+        "base_url": normalize_base_url(base_url)
+    }
 
 
 def clean_dkag_response(api_response: dict) -> dict:
@@ -263,14 +279,17 @@ def dkag_search(
             "min_length": MIN_QUERY_LENGTH
         }
 
-    # 获取 API Key
+    # 获取 API Key 和接口地址
+    base_url = DEFAULT_BASE_URL
     if not api_key:
-        api_key = load_config(config_path)
+        config = load_config(config_path)
+        api_key = config["api_key"]
+        base_url = config["base_url"]
 
     normalized_time = normalize_time_filter(time)
 
     # 构建完整 URL
-    url = FIXED_BASE_URL
+    url = normalize_base_url(base_url)
 
     # 构建请求体（新接口格式）
     payload = {

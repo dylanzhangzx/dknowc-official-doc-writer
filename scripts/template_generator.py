@@ -27,6 +27,8 @@ from docx.oxml import OxmlElement
 from datetime import datetime
 import argparse
 
+AI_DISCLAIMER_TEXT = "【AI生成提示】内容由AI生成，内容仅供参考。"
+
 UPWARD_TYPES = {"请示", "报告"}
 DOWNWARD_TYPES = {"通知", "通报", "意见", "通告", "公告"}
 LETTER_TYPES = {"函", "复函", "批复", "提醒函"}
@@ -42,6 +44,43 @@ def remove_reference_markers_from_doc(doc):
                 run.text = re.sub(r'\[\^\d+\^\]', '', run.text)
                 count += 1
     return count
+
+
+def remove_ai_disclaimer_from_doc(doc):
+    """删除已有 AI 生成提示，避免红头表尾插入后提示不在最末尾或重复。"""
+    removed = 0
+    for para in list(doc.paragraphs):
+        if para.text.strip() == AI_DISCLAIMER_TEXT:
+            para._p.getparent().remove(para._p)
+            removed += 1
+    return removed
+
+
+def add_ai_disclaimer(doc):
+    """在文档最末尾添加 AI 生成提示，并与正文做视觉区分。"""
+    para = doc.add_paragraph()
+    para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    para.paragraph_format.space_before = Pt(12)
+    para.paragraph_format.space_after = Pt(0)
+    para.paragraph_format.line_spacing = Pt(18)
+
+    pPr = para._p.get_or_add_pPr()
+    pBdr = OxmlElement('w:pBdr')
+    top = OxmlElement('w:top')
+    top.set(qn('w:val'), 'single')
+    top.set(qn('w:sz'), '4')
+    top.set(qn('w:space'), '6')
+    top.set(qn('w:color'), 'BFBFBF')
+    pBdr.append(top)
+    pPr.append(pBdr)
+
+    run = para.add_run(AI_DISCLAIMER_TEXT)
+    run.font.name = 'Times New Roman'
+    run.font.size = Pt(10.5)
+    run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+    run._element.rPr.rFonts.set(qn('w:eastAsia'), '仿宋_GB2312')
+    run._element.rPr.rFonts.set(qn('w:ascii'), 'Times New Roman')
+    run._element.rPr.rFonts.set(qn('w:hAnsi'), 'Times New Roman')
 
 
 def find_references_and_links_range(doc):
@@ -172,6 +211,7 @@ def generate_red_header_document(doc_type, input_path, replacements, output_path
 
     doc = Document(input_path)
     print(f"✓ 已加载普通格式文档: {input_path}")
+    remove_ai_disclaimer_from_doc(doc)
 
     # 1. 找到分页符位置、参考资料和知识专库链接的范围
     page_break_idx, ref_start, ref_end = find_references_and_links_range(doc)
@@ -197,6 +237,7 @@ def generate_red_header_document(doc_type, input_path, replacements, output_path
     insert_programmatic_footer_table(doc, replacements, page_break_idx, ref_start, doc_type)
     pos_desc = "分页符之前" if page_break_idx is not None else ("素材/参考来源之前" if ref_start is not None else "文档末尾")
     print(f"✓ 已生成代码化表尾: {pos_desc}")
+    add_ai_disclaimer(doc)
 
     # 5. 保存文件
     output_path = Path(output_path)
