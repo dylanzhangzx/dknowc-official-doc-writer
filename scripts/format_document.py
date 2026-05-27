@@ -760,11 +760,39 @@ def add_word_table(doc, table_rows, body_font, body_size):
     set_paragraph_format(spacer, first_line_indent=False, line_spacing=body_size + 12)
 
 
-def add_blank_paragraphs(doc, count, line_spacing):
+def set_paragraph_mark_font(para, font_name, font_size):
+    """设置空段落的段落标记字体，避免空行高度受默认样式影响。"""
+    pPr = para._p.get_or_add_pPr()
+    rPr = pPr.find(qn('w:rPr'))
+    if rPr is None:
+        rPr = OxmlElement('w:rPr')
+        pPr.append(rPr)
+
+    rFonts = rPr.find(qn('w:rFonts'))
+    if rFonts is None:
+        rFonts = OxmlElement('w:rFonts')
+        rPr.append(rFonts)
+    latin_font = get_latin_font_config()
+    rFonts.set(qn('w:ascii'), latin_font)
+    rFonts.set(qn('w:hAnsi'), latin_font)
+    rFonts.set(qn('w:eastAsia'), font_name)
+    rFonts.set(qn('w:cs'), font_name)
+
+    for tag in ('w:sz', 'w:szCs'):
+        elem = rPr.find(qn(tag))
+        if elem is None:
+            elem = OxmlElement(tag)
+            rPr.append(elem)
+        elem.set(qn('w:val'), str(int(font_size * 2)))
+
+
+def add_blank_paragraphs(doc, count, line_spacing, font_name=None, font_size=None):
     """插入指定数量的空段，用于公文固定空行。"""
     for _ in range(count):
         para = doc.add_paragraph()
         set_paragraph_format(para, first_line_indent=False, line_spacing=line_spacing)
+        if font_name and font_size:
+            set_paragraph_mark_font(para, font_name, font_size)
 
 
 def create_document(content_text, output_path=None):
@@ -854,9 +882,9 @@ def create_document(content_text, output_path=None):
             and not is_attachment_continuation(stripped)
         ):
             if is_signing_entity(stripped):
-                add_blank_paragraphs(doc, 3, body_line_spacing)
+                add_blank_paragraphs(doc, 3, body_line_spacing, body_font, body_size)
             elif is_date_line(stripped):
-                add_blank_paragraphs(doc, 3, body_line_spacing)
+                add_blank_paragraphs(doc, 3, body_line_spacing, body_font, body_size)
                 para = doc.add_paragraph()
                 para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 add_formatted_text(para, stripped, body_font, body_size)
@@ -932,7 +960,7 @@ def create_document(content_text, output_path=None):
             add_formatted_text(para, content, title_font, title_size)
             set_paragraph_format(para, first_line_indent=False, alignment=WD_ALIGN_PARAGRAPH.CENTER, line_spacing=title_line_spacing)
             set_outline_level(para, 0)  # 文档标题设为1级
-            add_blank_paragraphs(doc, 1, body_line_spacing)
+            add_blank_paragraphs(doc, 1, body_line_spacing, body_font, body_size)
             i += 1
             continue
 
@@ -968,7 +996,7 @@ def create_document(content_text, output_path=None):
 
         # 附件
         if is_attachment_line(stripped):
-            add_blank_paragraphs(doc, 1, body_line_spacing)
+            add_blank_paragraphs(doc, 1, body_line_spacing, body_font, body_size)
             para = doc.add_paragraph()
             add_formatted_text(para, stripped, body_font, body_size)
             set_attachment_list_format(para, continuation=False, line_spacing=body_line_spacing)
