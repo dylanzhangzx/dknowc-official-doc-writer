@@ -153,15 +153,15 @@ python3 scripts/merge_search_results.py result1.json result2.json --output merge
 普通 Word：
 
 ```bash
-python3 scripts/format_document.py /tmp/official_doc_content.txt --output ~/.openclaw/data/official-docs/output/文件名.docx
+python3 scripts/format_document.py /tmp/official_doc_content.txt
 ```
 
-调用前先把正文写入临时正文文件。只有一句话以内的极短文本才允许使用 `--text`；多行正文不得直接通过命令行参数传入，避免换行被破坏后整篇文档变成一个段落。
+调用前先把正文写入临时正文文件。默认保存到 `config/format.json` 的 `output.dir`；如用户明确要求保存到指定位置，再传入 `--output 指定路径`。只有一句话以内的极短文本才允许使用 `--text`；多行正文不得直接通过命令行参数传入，避免换行被破坏后整篇文档变成一个段落。
 
 红头 Word：
 
 ```bash
-python3 scripts/template_generator.py 通知 --input ~/.openclaw/data/official-docs/output/文件名.docx --org "发文机关" --doc-number "发文字号"
+python3 scripts/template_generator.py 通知 --input 普通Word文件路径 --org "发文机关" --doc-number "发文字号"
 ```
 
 红头脚本只能在用户明确要求红头时调用。用户只要求“生成 Word”“正式 Word”“排版文件”时，不调用红头脚本。

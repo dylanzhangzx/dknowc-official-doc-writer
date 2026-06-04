@@ -1,5 +1,14 @@
 # 更新日志
 
+## [3.0.12] - 2026-06-03
+
+### 优化
+
+- 新增 Word 输出目录配置项 `config/format.json` -> `output.dir`。
+- Word 生成路径调整为三层优先级：命令行 `--output` > 配置项 `output.dir` > OpenClaw 默认目录 `~/.openclaw/data/official-docs/output`。
+- 更新 Word 交付说明，默认由配置控制保存目录；仅当用户明确要求指定保存位置时才传入 `--output`。
+
+
 ## [3.0.11] - 2026-05-27
 
 ### 空行字体字号修复

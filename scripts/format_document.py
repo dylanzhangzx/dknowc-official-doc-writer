@@ -86,7 +86,7 @@ def is_internal_search_endpoint(url):
 
 DEFAULT_ORG = "广东省政务服务和数据管理局"
 DEFAULT_DOC_PREFIX = "粤政数"
-OUTPUT_DIR = os.path.expanduser("~/.openclaw/data/official-docs/output")
+DEFAULT_OUTPUT_DIR = "~/.openclaw/data/official-docs/output"
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'format.json')
 AI_DISCLAIMER_TEXT = "【AI生成提示】内容由AI生成，内容仅供参考。"
 
@@ -106,6 +106,17 @@ def load_format_config():
 
 # 加载配置（全局变量）
 FORMAT_CONFIG = load_format_config()
+
+
+def get_configured_output_dir():
+    """获取 Word 输出目录：配置优先，缺省回退到 OpenClaw 默认目录。"""
+    configured_dir = None
+    if FORMAT_CONFIG:
+        output_config = FORMAT_CONFIG.get('output', {})
+        if isinstance(output_config, dict):
+            configured_dir = output_config.get('dir') or output_config.get('output_dir')
+
+    return os.path.expanduser(configured_dir or DEFAULT_OUTPUT_DIR)
 
 
 def get_font_config(element_name):
@@ -1117,7 +1128,7 @@ def create_document(content_text, output_path=None):
     # 保存文件
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     if not output_path:
-        output_path = f'{OUTPUT_DIR}/公文_{timestamp}.docx'
+        output_path = os.path.join(get_configured_output_dir(), f'公文_{timestamp}.docx')
 
     if not output_path.lower().endswith('.docx'):
         output_path = output_path.rsplit('.', 1)[0] + '.docx' if '.' in output_path else output_path + '.docx'
