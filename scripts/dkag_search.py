@@ -33,6 +33,9 @@ CONFIG_FILE = Path(__file__).parent.parent / "config.ini"
 DEFAULT_BASE_URL = "https://open.dknowc.cn/dependable/search/"
 FIXED_SEGMENT_COUNT = 2
 FIXED_SIMPLIFIED = False
+DEFAULT_MATERIAL_LENGTH = 12000
+VALID_SEARCH_TYPES = {"policy", "affair", "govSite", "qa", "private"}
+VALID_SEARCH_CHANNELS = {"govSearch", "webSearch", "wxSearch"}
 
 
 def normalize_time_filter(time: Optional[str]) -> Optional[str]:
@@ -59,6 +62,35 @@ def normalize_base_url(base_url: str) -> str:
     if not base_url.endswith("/"):
         base_url += "/"
     return base_url
+
+
+def parse_list_values(values: Optional[list[str]]) -> list[str]:
+    """解析命令行传入的多值参数，兼容重复传参和逗号分隔。"""
+    parsed: list[str] = []
+    for value in values or []:
+        for item in str(value).split(","):
+            item = item.strip()
+            if item and item not in parsed:
+                parsed.append(item)
+    return parsed
+
+
+def validate_choices(values: list[str], valid_values: set[str], field_name: str) -> list[str]:
+    """校验接口枚举参数，避免拼写错误导致检索范围失控。"""
+    invalid = [value for value in values if value not in valid_values]
+    if invalid:
+        valid_text = ", ".join(sorted(valid_values))
+        raise ValueError(f"{field_name} 包含无效值: {', '.join(invalid)}；可选值: {valid_text}")
+    return values
+
+
+def normalize_material_length(material_length: Optional[int]) -> int:
+    """限制单次检索返回材料体量，避免过长上下文影响写作。"""
+    if material_length is None:
+        return DEFAULT_MATERIAL_LENGTH
+    if material_length <= 0:
+        raise ValueError("MaterialLength 必须为正整数")
+    return material_length
 
 
 def load_config(config_path: Optional[Path] = None) -> dict:
@@ -237,6 +269,9 @@ def dkag_search(
     clean: bool = False,
     policy: bool = False,
     full: bool = False,
+    search_types: Optional[list[str]] = None,
+    search_channels: Optional[list[str]] = None,
+    material_length: Optional[int] = DEFAULT_MATERIAL_LENGTH,
 ) -> dict:
     """
     调用深知可信搜索接口召回素材
@@ -257,6 +292,9 @@ def dkag_search(
         clean: 是否对返回结果进行数据清洗（默认 False）
         policy: 是否返回规范性文件清单policyFiles（默认 False）
         full: 是否返回文章全文（return_full_content，默认 False）
+        search_types: 指定搜索素材类型，如 policy、affair、govSite、qa、private
+        search_channels: 指定动态搜索渠道，如 govSearch、webSearch、wxSearch
+        material_length: 控制返回素材总长度，默认 12000
         本 skill 固定使用 segmentCount=2，每篇材料最多返回 2 个相关段落。
 
     Returns:
@@ -287,6 +325,23 @@ def dkag_search(
         base_url = config["base_url"]
 
     normalized_time = normalize_time_filter(time)
+    try:
+        normalized_search_types = validate_choices(
+            parse_list_values(search_types),
+            VALID_SEARCH_TYPES,
+            "searchType"
+        )
+        normalized_search_channels = validate_choices(
+            parse_list_values(search_channels),
+            VALID_SEARCH_CHANNELS,
+            "searchChannel"
+        )
+        normalized_material_length = normalize_material_length(material_length)
+    except ValueError as e:
+        return {
+            "error": True,
+            "message": str(e)
+        }
 
     # 构建完整 URL
     url = normalize_base_url(base_url)
@@ -300,8 +355,14 @@ def dkag_search(
         "policy": policy,
         "return_full_content": full,
         "segmentCount": FIXED_SEGMENT_COUNT,
-        "simplified": FIXED_SIMPLIFIED
+        "simplified": FIXED_SIMPLIFIED,
+        "MaterialLength": normalized_material_length
     }
+
+    if normalized_search_types:
+        payload["searchType"] = normalized_search_types
+    if normalized_search_channels:
+        payload["searchChannel"] = normalized_search_channels
 
     # 构建请求头
     headers = {
@@ -319,7 +380,10 @@ def dkag_search(
         "full": full,
         "clean": clean,
         "segmentCount": FIXED_SEGMENT_COUNT,
-        "simplified": FIXED_SIMPLIFIED
+        "simplified": FIXED_SIMPLIFIED,
+        "MaterialLength": normalized_material_length,
+        "searchType": normalized_search_types,
+        "searchChannel": normalized_search_channels
     }
 
     # 发送请求
@@ -388,6 +452,22 @@ def main():
     parser.add_argument("--clean", action="store_true", help="对返回结果进行数据清洗（去除HTML转义、网页干扰词等）")
     parser.add_argument("--policy", action="store_true", help="返回规范性文件清单（policyFiles）")
     parser.add_argument("--full", action="store_true", help="返回文章全文（return_full_content）")
+    parser.add_argument(
+        "--search-type",
+        action="append",
+        help="指定搜索素材类型，可重复传入或用逗号分隔：policy, affair, govSite, qa, private"
+    )
+    parser.add_argument(
+        "--search-channel",
+        action="append",
+        help="指定动态搜索渠道，可重复传入或用逗号分隔：govSearch, webSearch, wxSearch"
+    )
+    parser.add_argument(
+        "--material-length",
+        type=int,
+        default=DEFAULT_MATERIAL_LENGTH,
+        help=f"控制返回素材总长度（默认: {DEFAULT_MATERIAL_LENGTH}）"
+    )
     parser.add_argument("--output", "-o", help="输出 JSON 文件路径（可选，默认输出到标准输出）")
 
     args = parser.parse_args()
@@ -401,7 +481,10 @@ def main():
         config_path=Path(args.config) if args.config else None,
         clean=args.clean,
         policy=args.policy,
-        full=args.full
+        full=args.full,
+        search_types=args.search_type,
+        search_channels=args.search_channel,
+        material_length=args.material_length
     )
 
     # 输出结果

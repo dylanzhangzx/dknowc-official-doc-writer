@@ -1,5 +1,14 @@
 # 更新日志
 
+## [3.0.13] - 2026-06-05
+
+### 可信搜索能力适配
+
+- `scripts/dkag_search.py` 新增 `--search-type`、`--search-channel` 和 `--material-length` 参数，适配可信搜索接口新增的素材类型、动态搜索渠道和返回材料长度控制。
+- 搜索策略更新为：政策依据优先使用 `--search-type policy --policy`；政府公开数据、工作动态和案例优先使用 `--search-type govSite --search-channel govSearch`；政务事项和办事口径使用 `--search-type affair`。
+- 明确 `searchSourceUrl`、`searchSourceId` 暂不纳入默认写作流程，避免使用未验证稳定的指定数据源过滤能力影响召回。
+- 搜索方案展示模板增加拟使用参数说明，便于用户确认搜索范围后再执行。
+
 ## [3.0.12] - 2026-06-03
 
 ### 优化

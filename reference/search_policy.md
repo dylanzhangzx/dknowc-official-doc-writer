@@ -55,7 +55,7 @@ python3 scripts/dkag_search.py "搜索词" --area 地域 --clean --output result
 
 - 搜索地域：如中国、广东省、广州市等。
 - 搜索内容：每条 query 的目的和关键词。
-- 素材类型：政策依据型、数据支撑型、参考案例型。
+- 素材类型：政策依据型、数据支撑型、参考案例型，并说明对应的深知搜索参数。
 - 使用边界：哪些材料可作为政策依据，哪些只能作为案例或表述参考。
 
 不要为“表述参考型”单独设计 query 或单独搜索。表述参考来自政策依据、数据支撑、参考案例等已召回材料中的行文方式、结构和措辞，只能作为写作表达参考，不列入独立检索计划。
@@ -103,25 +103,33 @@ python3 scripts/dkag_search.py "搜索词" --area 地域 --clean --output result
 - 国家级相关政策：单独 query，`--area 中国`
 - 本省/直辖市相关政策：单独 query，`--area 省名/直辖市名`
 - 本市相关政策：如适用，单独 query，`--area 市名`
-- 政策依据型检索默认使用 `--policy`，以便返回规范性文件清单；如不使用 `--policy`，必须有明确理由。
+- 政策依据型检索默认使用 `--search-type policy --policy`，以便优先召回政策文件并返回规范性文件清单；如不使用，必须有明确理由。
 
 二、数据支撑
 
 - 本级整体数据：围绕现状、规模、进展、成效构造 query
 - 下属行政区划数据：必要时按区县或部门分别构造 query
+- 政府公开数据、工作进展、统计口径等，优先使用 `--search-type govSite --search-channel govSearch`，减少泛网页材料干扰。
 
 三、参考案例
 
 - 横向案例：同级可比地区的做法和经验
 - 纵向案例：本地区历年同类工作的数据和做法
+- 政府部门发布的案例、经验做法、工作动态，优先使用 `--search-type govSite --search-channel govSearch`。
+- 政务事项、办事规则、流程口径类材料，使用 `--search-type affair`。
+- `qa` 和 `private` 不作为默认公文写作搜索类型；只有用户明确要求常见问答或私有库材料时才使用。
 
 四、附加参数
 
 - 时间过滤：`--time` 仅用于明确的单个时间点或年份，如 `2025年`、`2025年08月`、`2025年08月15日`。不要使用 `2023-2025`、`2023年-2025年` 这类范围；需要覆盖多年时，优先不加 `--time`，或拆成多次单年检索。
 - 规范性文件清单：使用 `--policy`
+- 搜索素材类型：使用 `--search-type` 指定，支持 `policy`、`affair`、`govSite`、`qa`、`private`。写作场景默认只使用 `policy`、`govSite`、必要时使用 `affair`。
+- 动态搜索渠道：当使用 `--search-type govSite` 时，可加 `--search-channel govSearch`，优先召回政府官网、政务站点和官方渠道材料。
 - 全文召回：仅对参考范文使用 `--full`，不要同时加 `--clean`
 - 段落数量：本 skill 固定使用 `segmentCount=2`，每篇材料最多返回 2 个相关段落
 - 精简输出：本 skill 固定使用 `simplified=false`，用于写作场景保留更多候选材料，再由 Agent 做素材筛选
+- 材料长度：脚本默认使用 `MaterialLength=12000`，控制单次召回材料总长度。除非用户明确要求深度研究或材料明显不足，不要主动调大。
+- 指定数据源：`searchSourceUrl`、`searchSourceId` 当前不纳入默认流程。现有测试中该参数对召回范围约束不稳定，不得作为筛选指定官网或指定资料库的可靠手段写入搜索方案。
 
 ## 执行命令
 
@@ -144,6 +152,24 @@ python3 scripts/merge_search_results.py result1.json result2.json --output merge
 ```
 
 如需要补充政策文件全称或发文字号，可用文章标题加 `--policy` 补搜一次。
+
+政策依据型搜索：
+
+```bash
+python3 scripts/dkag_search.py "搜索词" --area 地域 --search-type policy --policy --clean --output result_policy.json
+```
+
+政府站点动态、数据和案例搜索：
+
+```bash
+python3 scripts/dkag_search.py "搜索词" --area 地域 --search-type govSite --search-channel govSearch --clean --output result_govsite.json
+```
+
+政务事项、办事口径搜索：
+
+```bash
+python3 scripts/dkag_search.py "搜索词" --area 地域 --search-type affair --clean --output result_affair.json
+```
 
 ## 素材四分类
 
