@@ -2,8 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$comment": "广东省政务服务和数据管理局公文格式标准（试行）",
   "output": {
-    "dir": "~/.openclaw/data/official-docs/output",
-    "$comment": "Word 输出目录。命令行 --output 优先；未传 --output 时使用本配置；未配置时回退到 OpenClaw 默认目录。"
+    "dir": "official-docs/output",
+    "$comment": "Word 默认输出目录，相对路径基于 Skill 安装目录解析（与调用时 cwd 无关）。--output 仅传文件名时写入此目录；传绝对路径时优先使用 --output。"
   },
   "page": {
     "paper": "A4",

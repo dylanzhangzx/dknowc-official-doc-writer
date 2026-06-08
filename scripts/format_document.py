@@ -86,8 +86,9 @@ def is_internal_search_endpoint(url):
 
 DEFAULT_ORG = "广东省政务服务和数据管理局"
 DEFAULT_DOC_PREFIX = "粤政数"
-DEFAULT_OUTPUT_DIR = "~/.openclaw/data/official-docs/output"
+DEFAULT_OUTPUT_DIR = "official-docs/output"
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'format.json')
+SKILL_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 AI_DISCLAIMER_TEXT = "【AI生成提示】内容由AI生成，内容仅供参考。"
 
 
@@ -108,15 +109,35 @@ def load_format_config():
 FORMAT_CONFIG = load_format_config()
 
 
+def get_skill_root():
+    """Skill 安装根目录（含 scripts/、config/ 等），与调用时的 cwd 无关。"""
+    return SKILL_ROOT
+
+
 def get_configured_output_dir():
-    """获取 Word 输出目录：配置优先，缺省回退到 OpenClaw 默认目录。"""
+    """获取 Word 输出目录：相对路径基于 Skill 安装目录解析，不依赖 cwd。"""
     configured_dir = None
     if FORMAT_CONFIG:
         output_config = FORMAT_CONFIG.get('output', {})
         if isinstance(output_config, dict):
             configured_dir = output_config.get('dir') or output_config.get('output_dir')
 
-    return os.path.expanduser(configured_dir or DEFAULT_OUTPUT_DIR)
+    output_dir = os.path.expanduser(configured_dir or DEFAULT_OUTPUT_DIR)
+    if not os.path.isabs(output_dir):
+        output_dir = os.path.join(get_skill_root(), output_dir)
+    return os.path.abspath(output_dir)
+
+
+def resolve_output_path(output_path):
+    """解析输出路径：纯文件名写入默认输出目录，相对路径基于 Skill 根目录，绝对路径保持不变。"""
+    if not output_path:
+        return None
+    output_path = os.path.expanduser(output_path.strip())
+    if os.path.isabs(output_path):
+        return os.path.abspath(output_path)
+    if output_path == os.path.basename(output_path):
+        return os.path.join(get_configured_output_dir(), output_path)
+    return os.path.abspath(os.path.join(get_skill_root(), output_path))
 
 
 def get_font_config(element_name):
@@ -1129,6 +1150,8 @@ def create_document(content_text, output_path=None):
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     if not output_path:
         output_path = os.path.join(get_configured_output_dir(), f'公文_{timestamp}.docx')
+
+    output_path = resolve_output_path(output_path)
 
     if not output_path.lower().endswith('.docx'):
         output_path = output_path.rsplit('.', 1)[0] + '.docx' if '.' in output_path else output_path + '.docx'
