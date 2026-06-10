@@ -1,5 +1,13 @@
 # 更新日志
 
+## [3.0.16] - 2026-06-10
+
+### 路径引用修复
+
+- 统一参考文件引用为基于 Skill 根目录的相对路径，例如 `reference/standards/...`。
+- 修复线上环境读取 `reference/standards/99_可选参考_常用句式和结构.md` 等参考文件时，因短路径被解析到错误目录导致的读取失败。
+- 同步规范 `reference/standards/00_索引.md`、`reference/task_router.md`、`reference/review_checklist.md` 等文件中的内部文档路径，避免不同渠道运行环境出现路径歧义。
+
 ## [3.0.15] - 2026-06-08
 
 ### 分发包精简
@@ -51,7 +59,7 @@
 ### 召回材料使用规则
 - 新增 `reference/material_usage_guidance.md`，明确深知搜索召回材料如何转化为正文内容。
 - 强化用户信息优先、材料服务观点、政策/数据/案例/表述分类使用、缺口不硬编等写作原则。
-- 更新 `SKILL.md`、`search_policy.md`、`task_router.md` 和 `review_checklist.md`，要求执行过搜索时按材料使用指导完成内部整理和生成后自检。
+- 更新 `SKILL.md`、`reference/search_policy.md`、`reference/task_router.md` 和 `reference/review_checklist.md`，要求执行过搜索时按材料使用指导完成内部整理和生成后自检。
 - 该规则只约束材料使用边界，不强制固定文章结构，避免把公文写作变成机械模板填充。
 
 ## [3.0.8] - 2026-05-26
@@ -142,7 +150,7 @@
 **修复：**
 - `dkag_search.py` 遇到 `2023-2025`、`2023年-2025年` 等范围时间时自动忽略时间过滤，避免触发接口 500
 - 接口返回 `ret/errcode` 异常时直接输出“深知搜索接口返回异常”，不再清洗成空结果
-- `SKILL.md` 和 `search_policy.md` 明确：`--time` 只用于单个明确时间点；多年范围应省略时间或拆成单年检索
+- `SKILL.md` 和 `reference/search_policy.md` 明确：`--time` 只用于单个明确时间点；多年范围应省略时间或拆成单年检索
 
 #### 五、按接口文档补充写作场景参数
 
@@ -150,16 +158,16 @@
 **修复：**
 - `dkag_search.py` 固定传入 `simplified=false`
 - 保留 `knowBase=true`，用于继续获取知识专库链接
-- `SKILL.md` 和 `search_policy.md` 补充固定参数说明
+- `SKILL.md` 和 `reference/search_policy.md` 补充固定参数说明
 
 #### 六、异常处理改为用户确认
 
 **问题：** 搜索或生成步骤异常时，Agent 可能自行跳过搜索、改用 Web 搜索或继续生成，导致来源边界和交付结果不可控。  
 **修复：**
 - `SKILL.md` 增加关键步骤异常暂停规则
-- `search_policy.md` 明确搜索异常、空结果、关键素材缺失时必须向用户确认下一步
-- `output_guide.md` 明确 Word 生成失败或格式异常时必须暂停确认
-- `review_checklist.md` 增加异常处理和未经同意改用 Web 搜索检查项
+- `reference/search_policy.md` 明确搜索异常、空结果、关键素材缺失时必须向用户确认下一步
+- `reference/output_guide.md` 明确 Word 生成失败或格式异常时必须暂停确认
+- `reference/review_checklist.md` 增加异常处理和未经同意改用 Web 搜索检查项
 
 #### 七、搜索分类和 Word 交付规则收紧
 
@@ -178,9 +186,9 @@
 **问题：** OpenClaw 测试中 Agent 绕过深知搜索脚本，直接调用 Web Search/Web Fetch 检索公开网页，导致素材来源、知识专库链接和交付行为失控。  
 **修复：**
 - `SKILL.md` 明确所有政策、数据、案例、素材检索默认只能使用 `scripts/dkag_search.py`
-- `search_policy.md` 新增“搜索工具边界”，禁止默认使用 Web Search、Web Fetch、浏览器搜索或公开网页抓取替代深知搜索
-- `task_router.md` 强化用户确认搜索方案后只能执行深知搜索脚本
-- `review_checklist.md` 增加是否绕过深知搜索的审查项
+- `reference/search_policy.md` 新增“搜索工具边界”，禁止默认使用 Web Search、Web Fetch、浏览器搜索或公开网页抓取替代深知搜索
+- `reference/task_router.md` 强化用户确认搜索方案后只能执行深知搜索脚本
+- `reference/review_checklist.md` 增加是否绕过深知搜索的审查项
 
 **结果：**
 - 普通 Word 与红头 Word 的触发边界更清晰

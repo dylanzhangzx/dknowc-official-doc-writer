@@ -55,7 +55,7 @@ Tool Wrapper：
 Generator：
 
 - 默认写作模式
-- 使用文种标准、用户材料和 `material_usage_guidance.md` 生成内部正文草稿；长篇正式材料不得把草稿直接发给用户
+- 使用文种标准、用户材料和 `reference/material_usage_guidance.md` 生成内部正文草稿；长篇正式材料不得把草稿直接发给用户
 
 Reviewer：
 
