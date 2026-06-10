@@ -41,6 +41,19 @@ python3 scripts/dkag_search.py "搜索词" --area 地域 --clean --output result
 
 如果深知搜索异常、空结果或素材不足，必须先暂停并请用户选择下一步，不得自行切换到 Web Search/Web Fetch。
 
+
+## Public 版 Key 缺失处理
+
+Public 渠道版不内置深知搜索 API Key。判断任务需要搜索时，在展示搜索方案前先确认本 Skill 目录下是否存在 `config.ini` 且 `api_key` 有效。
+
+如果未配置，必须暂停并提示用户通过 GitHub 渠道注册链接注册并获取 API Key：
+
+```text
+https://platform.dknowc.cn/
+```
+
+随后指导用户将 `config.ini.example` 复制为 `config.ini` 并填入 `api_key`。用户完成配置前，不得执行深知搜索，不得自动改用 Web Search/Web Fetch。
+
 ## Query 生成原则
 
 - 使用自然语言完整句子，避免关键词堆砌。

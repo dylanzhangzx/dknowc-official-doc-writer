@@ -36,6 +36,19 @@ description: |
 - 任一关键步骤出现异常时，必须暂停并向用户确认下一步；不得自行跳过搜索、改用 Web 搜索、改写任务目标或继续生成正式结果。
 - 生成前后按任务风险调用 `reference/review_checklist.md`。
 
+
+## Public 版 API Key 引导
+
+本版本不内置深知搜索 API Key。只要任务需要政策、数据、案例、标准或其他外部素材检索，在展示搜索方案前必须先确认本 Skill 目录下是否已配置 `config.ini` 且包含有效 `api_key`。
+
+如未配置或搜索脚本提示 API Key 缺失，不得继续执行搜索或改用其他搜索工具；必须先向用户说明："深知写作助手的政策、数据和案例检索依赖深知可信搜索，首次使用需要注册并配置 API Key。" 然后给出 GitHub 渠道注册链接：
+
+```text
+https://platform.dknowc.cn/
+```
+
+同时给出最短配置步骤：注册并登录深知平台，获取 API Key；将 `config.ini.example` 复制为 `config.ini`；把 `api_key=your_api_key_here` 替换为实际 API Key。用户完成配置后，再继续原搜索方案。
+
 ## 任务路由
 
 开始工作前先判断任务类型和复杂度。具体规则见 `reference/task_router.md`。

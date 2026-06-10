@@ -31,6 +31,7 @@ QUERY_TOO_SHORT_ERROR = f"错误：查询关键词过短，最少需要 {MIN_QUE
 # 默认配置文件路径
 CONFIG_FILE = Path(__file__).parent.parent / "config.ini"
 DEFAULT_BASE_URL = "https://open.dknowc.cn/dependable/search/"
+REGISTER_URL = "https://platform.dknowc.cn/"
 FIXED_SEGMENT_COUNT = 2
 FIXED_SIMPLIFIED = False
 DEFAULT_MATERIAL_LENGTH = 12000
@@ -107,7 +108,9 @@ def load_config(config_path: Optional[Path] = None) -> dict:
     if not config_path.exists():
         raise FileNotFoundError(
             f"配置文件不存在: {config_path}\n"
-            f"请创建配置文件并添加你的 API Key:\n"
+            f"请先通过本渠道注册链接注册并获取 API Key:\n"
+            f"  {REGISTER_URL}\n"
+            f"然后创建配置文件并添加你的 API Key:\n"
             f"  [dkag]\n"
             f"  api_key=your_api_key_here\n"
             f"  base_url={DEFAULT_BASE_URL}"
@@ -131,7 +134,11 @@ def load_config(config_path: Optional[Path] = None) -> dict:
                     base_url = line.split('=', 1)[1].strip()
 
     if not api_key:
-        raise ValueError("API Key 为空，请在配置文件中设置有效的 api_key")
+        raise ValueError(
+            "API Key 为空，请先通过本渠道注册链接注册并获取 API Key：\n"
+            f"{REGISTER_URL}\n"
+            "然后在 config.ini 中设置有效的 api_key"
+        )
     
     return {
         "api_key": api_key,
