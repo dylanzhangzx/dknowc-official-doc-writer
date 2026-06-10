@@ -1,5 +1,12 @@
 # 更新日志
 
+## [3.0.18] - 2026-06-10
+
+### API Key 缺失提示稳定化
+
+- 将配置文件缺失、API Key 为空等启动阶段异常改为结构化 JSON 输出，包含 `error`、`message`、`register_url` 和配置提示。
+- 避免首次使用未配置 Key 时暴露 Python traceback，提升 Agent 转述渠道注册链接和配置步骤的稳定性。
+
 ## [3.0.17] - 2026-06-10
 
 ### Public 版 API Key 引导增强

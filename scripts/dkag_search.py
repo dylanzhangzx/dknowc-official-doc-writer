@@ -479,20 +479,28 @@ def main():
 
     args = parser.parse_args()
 
-    # 调用搜索
-    result = dkag_search(
-        query=args.query,
-        area=args.area,
-        time=args.time,
-        api_key=args.api_key,
-        config_path=Path(args.config) if args.config else None,
-        clean=args.clean,
-        policy=args.policy,
-        full=args.full,
-        search_types=args.search_type,
-        search_channels=args.search_channel,
-        material_length=args.material_length
-    )
+    # 调用搜索。配置缺失、API Key 缺失等启动阶段异常也输出为结构化 JSON，便于 Agent 稳定转述配置引导。
+    try:
+        result = dkag_search(
+            query=args.query,
+            area=args.area,
+            time=args.time,
+            api_key=args.api_key,
+            config_path=Path(args.config) if args.config else None,
+            clean=args.clean,
+            policy=args.policy,
+            full=args.full,
+            search_types=args.search_type,
+            search_channels=args.search_channel,
+            material_length=args.material_length
+        )
+    except Exception as exc:
+        result = {
+            "error": True,
+            "message": str(exc),
+            "register_url": REGISTER_URL,
+            "hint": "请先注册并配置 config.ini 中的 api_key，完成后再重新执行搜索。"
+        }
 
     # 输出结果
     output_json = json.dumps(result, ensure_ascii=False, indent=2)
