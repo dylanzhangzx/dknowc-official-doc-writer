@@ -1,5 +1,17 @@
 # 更新日志
 
+## [3.0.19] - 2026-06-25
+
+### 脚本路径与配置安全收口
+
+- 搜索接口统一固定为 `https://open.dknowc.cn/dependable/search/`，不同 Public 渠道仅保留各自注册链接用于获取 API Key。
+- `scripts/dkag_search.py` 固定读取 Skill 根目录下的 `config.ini`，不再从配置文件覆盖接口地址。
+- 搜索结果统一写入 `official-docs/search-results/`，避免任意路径写入。
+- `scripts/merge_search_results.py` 只读取 Skill 工作目录内的 JSON，并将合并结果写回搜索结果目录。
+- `scripts/format_document.py` 只读取 `official-docs/input/`、`official-docs/output/`、`official-docs/search-results/` 内的正文文件，Word 输出限制在 `official-docs/output/`。
+- `scripts/template_generator.py` 只读取和写入 Skill 工作目录内的 `.docx` 文件。
+- 更新 `SKILL.md`、`reference/output_guide.md` 和 `README.md` 中的命令示例，统一使用 Skill 工作目录，避免继续引导 Agent 使用 `/tmp` 或 `/private/tmp`。
+
 ## [3.0.18] - 2026-06-10
 
 ### API Key 缺失提示稳定化

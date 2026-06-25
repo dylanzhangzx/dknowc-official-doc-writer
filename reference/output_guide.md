@@ -85,10 +85,10 @@
 
 ```bash
 python3 scripts/format_document.py \
-  /tmp/official_doc_content.txt
+  official-docs/input/official_doc_content.txt
 ```
 
-调用前必须先把正文写入临时 `.txt` 或 `.md` 文件，再把文件路径传给脚本。默认保存到 `config/format.json` 的 `output.dir`；如用户明确要求保存到指定位置，再传入 `--output 指定路径`。多行正文不得直接放进 `--text` 参数，避免命令行传参破坏换行，导致整篇 Word 被识别成一个段落、标题和正文样式全部错乱。`--text` 只用于一句话以内的极短测试文本。
+调用前必须先把正文写入本 Skill 工作目录下的 `official-docs/input/` 临时 `.txt` 或 `.md` 文件，再把文件路径传给脚本。默认保存到 `config/format.json` 的 `output.dir`，且输出只能位于 `official-docs/output/`；如用户明确要求保存文件名，再传入 `--output 文件名.docx`。多行正文不得直接放进 `--text` 参数，避免命令行传参破坏换行，导致整篇 Word 被识别成一个段落、标题和正文样式全部错乱。`--text` 只用于一句话以内的极短测试文本。
 
 ### 红头文件命令
 
@@ -137,7 +137,7 @@ python3 scripts/template_generator.py 通知 \
 | `--org` | 发文机关（可选） | 广东省政务服务和数据管理局 |
 | `--doc-number` | 发文字号（可选） | 粤政数〔2026〕25号 |
 | `--signer` | 签发人（上行文需要，可选） | |
-| `--content` | 正文文件路径 | /tmp/content.txt |
+| `--content` | 正文文件路径 | official-docs/input/content.txt |
 
 支持的文种：
 - 下行文：通知、通报

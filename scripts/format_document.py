@@ -89,6 +89,9 @@ DEFAULT_DOC_PREFIX = "粤政数"
 DEFAULT_OUTPUT_DIR = "official-docs/output"
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'format.json')
 SKILL_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+OFFICIAL_DOCS_DIR = os.path.join(SKILL_ROOT, "official-docs")
+INPUT_DIR = os.path.join(OFFICIAL_DOCS_DIR, "input")
+SEARCH_RESULTS_DIR = os.path.join(OFFICIAL_DOCS_DIR, "search-results")
 AI_DISCLAIMER_TEXT = "【AI生成提示】内容由AI生成，内容仅供参考。"
 
 
@@ -125,19 +128,57 @@ def get_configured_output_dir():
     output_dir = os.path.expanduser(configured_dir or DEFAULT_OUTPUT_DIR)
     if not os.path.isabs(output_dir):
         output_dir = os.path.join(get_skill_root(), output_dir)
-    return os.path.abspath(output_dir)
+    output_dir = os.path.abspath(output_dir)
+    if not is_path_within(output_dir, os.path.abspath(os.path.join(get_skill_root(), DEFAULT_OUTPUT_DIR))):
+        raise ValueError(f"输出目录必须位于 {os.path.join(get_skill_root(), DEFAULT_OUTPUT_DIR)} 内")
+    return output_dir
+
+
+def is_path_within(path, parent):
+    """判断 path 是否位于 parent 目录内。"""
+    try:
+        return os.path.commonpath([os.path.abspath(path), os.path.abspath(parent)]) == os.path.abspath(parent)
+    except ValueError:
+        return False
+
+
+def resolve_input_text_path(input_path):
+    """只允许读取 skill 工作目录内的正文文本文件。"""
+    raw_path = os.path.expanduser(str(input_path).strip())
+    if os.path.isabs(raw_path):
+        resolved = os.path.abspath(raw_path)
+    elif raw_path == os.path.basename(raw_path):
+        resolved = os.path.abspath(os.path.join(INPUT_DIR, raw_path))
+    else:
+        resolved = os.path.abspath(os.path.join(get_skill_root(), raw_path))
+
+    allowed_dirs = [
+        os.path.abspath(INPUT_DIR),
+        os.path.abspath(get_configured_output_dir()),
+        os.path.abspath(SEARCH_RESULTS_DIR),
+    ]
+    if not any(is_path_within(resolved, allowed_dir) for allowed_dir in allowed_dirs):
+        raise ValueError(f"输入文件必须位于 skill 工作目录内: {input_path}")
+    if os.path.splitext(resolved)[1].lower() not in {".txt", ".md"}:
+        raise ValueError(f"只允许读取 .txt 或 .md 正文文件: {input_path}")
+    return resolved
 
 
 def resolve_output_path(output_path):
-    """解析输出路径：纯文件名写入默认输出目录，相对路径基于 Skill 根目录，绝对路径保持不变。"""
+    """解析输出路径：只允许写入固定 Word 输出目录。"""
     if not output_path:
         return None
     output_path = os.path.expanduser(output_path.strip())
+    output_dir = get_configured_output_dir()
     if os.path.isabs(output_path):
-        return os.path.abspath(output_path)
-    if output_path == os.path.basename(output_path):
-        return os.path.join(get_configured_output_dir(), output_path)
-    return os.path.abspath(os.path.join(get_skill_root(), output_path))
+        resolved = os.path.abspath(output_path)
+    elif output_path == os.path.basename(output_path):
+        resolved = os.path.abspath(os.path.join(output_dir, output_path))
+    else:
+        resolved = os.path.abspath(os.path.join(get_skill_root(), output_path))
+    if not is_path_within(resolved, output_dir):
+        raise ValueError(f"输出文件必须位于 Word 输出目录内: {output_dir}")
+    return resolved
 
 
 def get_font_config(element_name):
@@ -1179,15 +1220,23 @@ def main():
     
     if args.text:
         # 智能检测：如果 --text 是文件路径，自动读取文件内容
-        if os.path.exists(args.text) and os.path.isfile(args.text):
-            print(f'⚠ 检测到 --text 参数是文件路径，自动读取文件内容: {args.text}')
-            with open(args.text, 'r', encoding='utf-8') as f:
+        try:
+            text_path = resolve_input_text_path(args.text)
+        except ValueError:
+            text_path = None
+        if text_path and os.path.exists(text_path) and os.path.isfile(text_path):
+            print(f'⚠ 检测到 --text 参数是文件路径，自动读取文件内容: {text_path}')
+            with open(text_path, 'r', encoding='utf-8') as f:
                 content = f.read()
         else:
             content = args.text
-    elif args.input and os.path.exists(args.input):
-        with open(args.input, 'r', encoding='utf-8') as f:
-            content = f.read()
+    elif args.input:
+        input_path = resolve_input_text_path(args.input)
+        if os.path.exists(input_path):
+            with open(input_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        else:
+            raise FileNotFoundError(f"输入文件不存在: {input_path}")
     else:
         parser.print_help()
         sys.exit(1)
