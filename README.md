@@ -1,6 +1,6 @@
 # 深知写作助手
 
-[![Version](https://img.shields.io/badge/version-3.0.19-blue)](./CHANGE_log.md)
+[![Version](https://img.shields.io/badge/version-3.0.20-blue)](./CHANGE_log.md)
 [![Skill](https://img.shields.io/badge/Agent%20Skill-dknowc--official--doc--writer-purple)](./SKILL.md)
 [![License](https://img.shields.io/badge/license-see%20repository-lightgrey)](./README.md)
 
@@ -143,4 +143,4 @@ python3 scripts/merge_search_results.py result_gd.json result_bj.json --output m
 
 ## 版本
 
-当前 GitHub Public 版基于 `3.0.19`。
+当前 GitHub Public 版基于 `3.0.20`。
