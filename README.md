@@ -1,6 +1,6 @@
 # 深知写作助手
 
-[![Version](https://img.shields.io/badge/version-3.0.20-blue)](./CHANGE_log.md)
+[![Version](https://img.shields.io/badge/version-3.0.25-blue)](./CHANGE_log.md)
 [![Skill](https://img.shields.io/badge/Agent%20Skill-dknowc--official--doc--writer-purple)](./SKILL.md)
 [![License](https://img.shields.io/badge/license-see%20repository-lightgrey)](./README.md)
 
@@ -69,19 +69,19 @@ https://open.dknowc.cn/dependable/search/
 简单写作任务：
 
 ```text
-帮我写一份关于召开数据治理专题会议的通知，发文机关是广东省政务服务和数据管理局，主送各处室、省政务服务数据事务中心，会议时间是 2026 年 5 月 25 日上午 9:30。
+帮我写一份关于召开数据治理专题会议的通知，发文机关是XX单位，主送各部门、所属单位，会议时间是 2026 年 5 月 25 日上午 9:30。
 ```
 
 需要搜索支撑的长篇材料：
 
 ```text
-请使用深知写作助手，帮我生成一份《2025年广东省人工智能产业发展情况总结报告》，需要结合广东省和国家层面的政策、数据和案例素材，最后生成 Word。
+请使用深知写作助手，帮我生成一份《2025年某省人工智能产业发展情况总结报告》，需要结合某省和国家层面的政策、数据和案例素材，最后生成 Word。
 ```
 
 红头文件：
 
 ```text
-请生成普通 Word 后，再生成一份红头文件。发文机关：广东省政务服务和数据管理局；文号：粤政数〔2026〕1号。
+请生成普通 Word 后，再生成一份红头文件。发文机关：XX单位；文号：XX〔2026〕1号。
 ```
 
 ## 常用测试
@@ -101,13 +101,13 @@ python3 scripts/format_document.py official-docs/input/dknowc-test.md --output d
 红头 Word 生成：
 
 ```bash
-python3 scripts/template_generator.py 通知 --input dknowc-test.docx --org "广东省政务服务和数据管理局" --doc-number "粤政数〔2026〕1号" --output dknowc-test-red.docx
+python3 scripts/template_generator.py 通知 --input dknowc-test.docx --org "XX单位" --doc-number "XX〔2026〕1号" --output dknowc-test-red.docx
 ```
 
 搜索结果保存：
 
 ```bash
-python3 scripts/dkag_search.py "留学人才来粤服务政策" --area 广东省 --clean --output result_gd.json
+python3 scripts/dkag_search.py "人才服务政策" --area 某省 --clean --output result_gd.json
 ```
 
 多次搜索合并：
@@ -143,4 +143,4 @@ python3 scripts/merge_search_results.py result_gd.json result_bj.json --output m
 
 ## 版本
 
-当前 GitHub Public 版基于 `3.0.20`。
+当前 GitHub Public 版基于 `3.0.25`。

@@ -1,7 +1,8 @@
 # 深知可信搜索 API 配置文件
 #
 # 获取 API Key：
-# 1. 访问 https://platform.dknowc.cn/
+# 1. 访问 GitHub 渠道注册链接：
+#    https://platform.dknowc.cn/
 # 2. 注册并登录深知平台
 # 3. 获取深知可信搜索 API Key
 # 4. 将本文件复制为 config.ini
