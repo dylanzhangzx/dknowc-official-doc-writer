@@ -14,6 +14,7 @@ BANNED_TERMS = (
     "广东省政数" + "局",
     "粤政" + "数",
     "粤政" + "易",
+    "2787E171-" + "B0E5-4328-9946-47AC52434D1F",
 )
 ALLOWED_API_KEY_VALUES = {"", "your_api_key_here", "你的深知搜索 API Key"}
 API_KEY_PATTERN = re.compile(r"(?im)^\s*api_key\s*=\s*([^\s#;]+)\s*$")
@@ -44,10 +45,10 @@ def main():
             findings.append(f"{path.relative_to(SKILL_ROOT)}: 发现疑似 API Key")
 
     if findings:
-        print("发布检查失败：发现客户信息、真实配置或疑似 API Key")
+        print("发布检查失败：发现客户信息、渠道码、真实配置或疑似 API Key")
         print("\n".join(findings))
         raise SystemExit(1)
-    print("发布检查通过：未发现客户信息、真实配置或疑似 API Key")
+    print("发布检查通过：未发现客户信息、渠道码、真实配置或疑似 API Key")
 
 
 if __name__ == "__main__":
