@@ -9,8 +9,9 @@
 - 搜索策略：`reference/search_policy.md` 保留深知搜索逻辑、素材四分类和来源限制。
 - 任务路由：`reference/task_router.md` 定义简单任务、常规任务、复杂任务和高风险任务的处理方式。
 - 质量审查：`reference/review_checklist.md` 定义公文内容、素材来源、文种专项和 Word 输出检查项。
-- Word 排版：通过 `scripts/format_document.py` 生成普通格式 `.docx`。
-- 红头文件：通过 `scripts/template_generator.py` 代码化生成红头和表尾，不依赖 `templates/` 中的 Word 模板。
+- Word 排版：通过 `scripts/format_document.py` 生成普通格式 `.docx`，支持 Markdown 表格和宽表横向页面。
+- 素材来源说明：通过 `scripts/source_note_html.py` 生成独立 HTML，正式 Word 正文不内嵌素材链接。
+- 红头文件：通过 `scripts/template_generator.py` 代码化生成红头和版记，不依赖 `templates/` 中的 Word 模板。
 
 ## 依赖
 
@@ -68,14 +69,24 @@ https://open.dknowc.cn/dependable/search/
 
 ## 版本说明
 
-当前 GitHub Public 版基于 `3.1.0`。
+当前 GitHub Public 版基于 `3.1.4`。
+
+本版重点同步：
+
+- 正文连续数字编号排版修复，避免第 2 项以后被误排为附件清单续行。
+- 红头文件不再保留 AI 生成提示，避免破坏国标版记位置。
+- 明确当前版本不支持自动生成 PDF；用户需要 PDF 时，先交付 Word，再由用户使用本机 Word/WPS 导出。
+- 标准 Markdown 表格生成 Word 原生表格。
+- 超过 6 列、用户明确要求横排，或表格前使用 `<!-- landscape-table -->` 标记时，自动为该表格切换横向 A4 页面。
+- 素材来源说明固定为独立 HTML，知识专库链接前置，素材按逐条溯源卡片展示。
+- 深知搜索支持内部 `--purpose` 元数据，用于知识专库链接外显文字。
 
 ## 常用测试
 
 语法检查：
 
 ```bash
-python3 -m py_compile scripts/dkag_search.py scripts/merge_search_results.py scripts/format_document.py scripts/template_generator.py scripts/initialize.py scripts/check_release.py
+python3 -m py_compile scripts/dkag_search.py scripts/merge_search_results.py scripts/format_document.py scripts/template_generator.py scripts/initialize.py scripts/source_note_html.py scripts/check_release.py
 node --check scripts/register.mjs
 ```
 
@@ -101,6 +112,12 @@ python3 scripts/dkag_search.py "人才服务政策" --area 某省 --clean --outp
 
 ```bash
 python3 scripts/merge_search_results.py result_gd.json result_bj.json --output merged.json
+```
+
+素材来源说明 HTML：
+
+```bash
+python3 scripts/source_note_html.py official-docs/input/source-note.json --output source-note.html
 ```
 
 ## Public 版说明
