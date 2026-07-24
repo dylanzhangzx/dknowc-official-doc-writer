@@ -84,6 +84,16 @@ python3 scripts/dkag_search.py "搜索词" --area 地域 --clean --output result
 
 执行搜索时必须保留用户确认方案中的“搜索目的”。内部调用 `scripts/dkag_search.py` 时，将该搜索项的搜索目的传入 `--purpose`，脚本会写入 `search_meta.purpose`。`--purpose` 属于内部执行参数，不得出现在用户可见搜索方案中。
 
+## 搜索执行节奏
+
+多个搜索项默认必须串行执行：
+
+- 每次只调用一个 `scripts/dkag_search.py` 搜索项。
+- 当前搜索项完成、结果 JSON 正常写入并完成异常判断后，才能执行下一项。
+- 不得为了提速自行使用并发命令、后台任务、线程池、批量请求或多 Agent 同时调用深知搜索接口。
+- 串行执行用于保证异常定位清楚、搜索目的与知识专库链接一一对应、素材来源说明可追溯。
+- 只有用户明确要求“并发搜索/加速搜索/同时检索”，并确认可接受接口限流、部分失败和链接对应关系检查风险时，才可以并发；否则一律串行。
+
 ## 搜索异常处理
 
 以下情况视为搜索异常或素材风险：
@@ -250,7 +260,7 @@ python3 scripts/dkag_search.py "搜索词" --area 地域 --search-type affair --
 执行过搜索时，正式公文 Word 与素材溯源分开交付：
 
 - 正式公文 Word：普通 Word 只包含用户要求的公文正文、必要附件、落款、版记和固定 AI 生成提示；红头 Word 不保留 AI 生成提示，以免影响国标版记排版。正式公文 Word 不得内嵌 `【素材使用情况】`、`【知识专库链接】` 或知识专库 URL。
-- 素材来源说明：单独生成 `标题_素材来源说明.html`，首页先放知识专库链接，再放素材使用情况和需人工核验信息。素材使用情况必须按正文位置、支撑内容和材料来源组织成溯源卡片，体现可核验、可追溯价值。素材来源说明固定为 HTML，不生成 Word 版。
+- 素材来源说明：单独生成 `标题_素材来源说明.html`，首页先放知识专库链接，再放素材使用情况和需人工核验信息。素材使用情况必须按正文位置、支撑内容和材料来源组织成溯源卡片，体现可核验、可追溯价值。素材来源说明固定为 HTML，不生成 Word 版。最终 HTML 必须由 `scripts/source_note_html.py` 根据结构化 JSON 生成，模型不得手写页面或自行拼接链接、按钮和样式。
 
 具体格式见 `reference/search_guide.md`。
 
@@ -269,5 +279,6 @@ python3 scripts/dkag_search.py "搜索词" --area 地域 --search-type affair --
 - 制作素材来源说明时，优先读取搜索结果 JSON 顶层 `knowledgeBase`；如果顶层缺失，再读取 `content.knowledgeBase`；仍缺失时再检查 `search_meta.knowledgeBase`。
 - 必须从每个原始搜索结果 JSON 的 `knowledgeBase` 或 `content.knowledgeBase` 字段逐条复制到素材来源说明文件。
 - 不得手写、猜测、改写或混用其他搜索产生的链接。
+- 不得使用 `onclick`、`alert()`、`javascript:`、占位 URL、纯文本说明或无法点击的伪链接替代真实知识专库链接。
 - 合并文件只用于读取文章材料；如合并文件没有保留 `knowledgeBase`，必须回到原始搜索结果文件读取。
 - 如果某个关键搜索结果缺少 `knowledgeBase`，按搜索异常处理规则向用户确认下一步。

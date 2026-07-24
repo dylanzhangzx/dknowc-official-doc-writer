@@ -3,8 +3,10 @@ config/user_profile.json
 official-docs/input/*
 official-docs/output/*
 official-docs/search-results/*
+official-docs/outline-results/*
 !official-docs/input/.gitkeep
 !official-docs/search-results/.gitkeep
+!official-docs/outline-results/.gitkeep
 __pycache__/
 *.pyc
 .DS_Store

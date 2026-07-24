@@ -4,7 +4,62 @@
 
 ---
 
-## 一、搜索结果分类输出格式
+## 一、范文大纲搜索建议承接
+
+如果本轮已调用 `scripts/outline_reference.py` 且返回可用大纲，必须先由用户确认大纲和搜索建议。用户确认后，再把接口返回的 `search_suggestions` 转化为深知搜索方案。
+
+处理原则：
+
+- `search_suggestions` 只是检索方向，不是已检索素材。
+- 搜索方案仍需按政策依据型、数据支撑型、参考案例型拆分。
+- 不得把大纲接口返回内容写入素材来源说明，也不得生成知识专库链接。
+- 不得在用户可见方案中展示大纲接口 JSON、保存路径或脚本参数。
+- 如用户修改大纲，应按修改后的结构重新设计搜索方案。
+- 调用大纲接口时必须传入用户原始写作需求的完整表述，不得只传压缩标题，否则容易返回“未检索到可用范文”。
+- 大纲和搜索建议的用户确认内容必须分节展示，不得压成一整段。
+
+大纲确认展示模板：
+
+```text
+我先根据范文库生成了参考大纲和后续搜索建议，请确认是否按这个结构继续，或告诉我需要调整哪些部分。
+
+建议大纲：
+
+一、XXX
+- 写作目的：……
+- 主要要点：
+  - ……
+  - ……
+
+二、XXX
+- 写作目的：……
+- 主要要点：
+  - ……
+
+后续搜索建议：
+
+1. 政策依据
+- 检索方向：……
+- 用途：……
+
+2. 数据支撑
+- 检索方向：……
+- 用途：……
+
+3. 参考案例
+- 检索方向：……
+- 用途：……
+```
+
+用户确认大纲后的搜索衔接话术：
+
+```text
+我会基于已确认的大纲，把其中的搜索建议转化为政策、数据和案例检索方案。请确认下面的检索方案是否执行，或告诉我需要增删哪些搜索项。
+```
+
+---
+
+## 二、搜索结果分类输出格式
 
 所有搜索完成后，AI 对全部素材按以下格式分类输出：
 
@@ -41,7 +96,7 @@
 
 ---
 
-## 二、搜索方案展示模板
+## 三、搜索方案展示模板
 
 执行深知搜索前，先向用户展示搜索方案并等待确认。用户可见的搜索方案只写检索方向、地域、素材类型、检索内容和用途，不展示脚本命令、参数或文件名。
 
@@ -77,11 +132,11 @@
 
 用户确认后再执行搜索；如用户调整地域、query 或素材类型，按调整后的方案执行。执行时必须把每条搜索项的“搜索目的”作为内部 `--purpose` 传给搜索脚本，用于后续知识专库链接显示名；不得把 `--purpose` 展示给用户。
 
-内部执行时，Agent 再自行选择对应脚本参数并调用 `scripts/dkag_search.py`。内部参数选择不得要求用户理解，也不得作为搜索方案的一部分展示。
+内部执行时，Agent 再自行选择对应脚本参数并调用 `scripts/dkag_search.py`。内部参数选择不得要求用户理解，也不得作为搜索方案的一部分展示。多个搜索项默认串行执行：上一项搜索完成、结果 JSON 写入并完成异常判断后，再执行下一项。不得并发调用多个搜索请求，也不得使用后台任务或多 Agent 同时检索，除非用户明确要求并确认可接受并发风险。
 
 ---
 
-## 三、参考范文召回流程
+## 四、参考范文召回流程
 
 ### 步骤1：向用户推荐
 
@@ -131,7 +186,7 @@ for article in result['content']['data']['检索文章']:
 
 ---
 
-## 四、素材交付指引模板
+## 五、素材交付指引模板
 
 进入撰写环节前，AI 将所有素材整理成以下结构传入写作模型：
 
@@ -173,18 +228,34 @@ for article in result['content']['data']['检索文章']:
 
 ---
 
-## 五、素材来源说明 HTML
+## 六、素材来源说明 HTML
 
 执行过搜索时，正式公文 Word 不在正文末尾添加素材清单和知识专库链接。撰写完成后，单独生成 `标题_素材来源说明.html`，用于展示可溯源依据。素材来源说明固定为 HTML，不生成 Word 版。
 
 生成方式：
 
 1. 先将素材来源说明整理为结构化 JSON，保存到 `official-docs/input/标题_素材来源说明.json`。
-2. 再调用 `scripts/source_note_html.py` 生成 HTML：
+2. JSON 中的 `knowledge_bases` 必须逐条来自原始搜索结果 JSON；每次深知搜索对应一个知识专库链接。
+3. 再调用 `scripts/source_note_html.py` 生成 HTML：
 
 ```bash
 python3 scripts/source_note_html.py official-docs/input/标题_素材来源说明.json --output 标题_素材来源说明.html
 ```
+
+未指定目录的 `--output` 会保存到 `official-docs/output/`。也可以显式写为：
+
+```bash
+python3 scripts/source_note_html.py official-docs/input/标题_素材来源说明.json --output official-docs/output/标题_素材来源说明.html
+```
+
+生成边界：
+
+- 必须使用 `scripts/source_note_html.py` 生成最终 HTML；模型只负责准备结构化 JSON，不得手写完整 HTML 页面。
+- 不得自行拼接 `<a>`、`onclick`、按钮、卡片、CSS 或整页 HTML；不得用 Markdown、Word 排版脚本、浏览器保存网页等方式替代。
+- `knowledge_bases[].url` 必须是真实知识专库 URL，来源只能是对应原始搜索结果 JSON 的 `knowledgeBase`、`content.knowledgeBase` 或 `search_meta.knowledgeBase` 字段。
+- `knowledge_bases[].label` 必须优先使用对应搜索结果 JSON 的 `search_meta.purpose`，也就是用户确认搜索方案中的“搜索目的”；缺失时才用该次搜索 query 概括。
+- 不得使用 `alert()`、`javascript:`、纯文本提示、占位 `XXX`、搜索接口地址、材料网页 URL 或不可点击文本充当知识专库链接。
+- 如果任一关键搜索项没有可用知识专库链接，必须按搜索异常处理暂停并请用户确认，不得继续生成伪链接或省略后当作正常完成。
 
 JSON 示例：
 
@@ -195,11 +266,11 @@ JSON 示例：
   "knowledge_bases": [
     {
       "label": "深圳AI与智慧城市政策依据",
-      "url": "https://yun.dknowc.cn/wlcb/ShenZhi-policy/#/knowledgebase/?id=XXX"
+      "url": "https://yun.dknowc.cn/wlcb/ShenZhi-policy/#/knowledgebase/?id=search-result-id-1"
     },
     {
       "label": "深圳政务智能审批改革数据",
-      "url": "https://yun.dknowc.cn/wlcb/ShenZhi-policy/#/knowledgebase/?id=XXX"
+      "url": "https://yun.dknowc.cn/wlcb/ShenZhi-policy/#/knowledgebase/?id=search-result-id-2"
     }
   ],
   "materials": [
@@ -243,3 +314,4 @@ JSON 示例：
 - 知识专库链接按地域或素材类型分类列出
 - 知识专库链接必须逐条复制自搜索结果 JSON 顶层 `knowledgeBase` 字段；如顶层缺失，再读取原始返回位置 `content.knowledgeBase`。该链接不在 `content.data` 的文章材料字段内，不得因为 `data` 中找不到就认定缺失。
 - HTML 由 `scripts/source_note_html.py` 生成；不要手写完整 HTML 页面，也不要用 Word 排版脚本生成素材来源说明。
+- 最终 HTML 必须包含真实 `<a href="知识专库URL">搜索目的</a>` 链接。若检查发现 `href` 缺失、`onclick`/`alert()` 伪链接、占位 URL 或链接文字与搜索目的不一致，视为生成失败，必须回到 JSON 和原始搜索结果修正后重新运行脚本。

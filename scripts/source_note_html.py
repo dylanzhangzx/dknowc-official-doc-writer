@@ -7,6 +7,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
@@ -85,6 +86,18 @@ def esc(value) -> str:
     return html.escape(str(value or ""), quote=True)
 
 
+def validate_kb_url(url: str, index: int) -> str:
+    clean_url = str(url or "").strip()
+    parsed = urlparse(clean_url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError(f"知识专库链接{index}不是有效的 http/https URL，不能生成素材来源说明: {clean_url}")
+    if parsed.scheme == "javascript" or clean_url.lower().startswith(("javascript:", "alert(")):
+        raise ValueError(f"知识专库链接{index}疑似伪链接，不能生成素材来源说明: {clean_url}")
+    if "XXX" in clean_url or "占位" in clean_url:
+        raise ValueError(f"知识专库链接{index}包含占位内容，不能生成素材来源说明: {clean_url}")
+    return clean_url
+
+
 def normalize_list(value):
     if not value:
         return []
@@ -100,6 +113,7 @@ def render_kb_links(knowledge_bases):
         url = item.get("url") or item.get("knowledgeBase")
         if not url:
             continue
+        url = validate_kb_url(url, index)
         items.append(
             f'<a class="kb-link" href="{esc(url)}" target="_blank" rel="noopener noreferrer">'
             f'<span>{esc(label)}</span><small>点击打开</small></a>'

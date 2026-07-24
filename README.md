@@ -5,6 +5,7 @@
 ## 能力范围
 
 - 深知可信搜索：通过 `scripts/dkag_search.py` 调用搜索接口获取政策、数据和案例素材。
+- 公文范文大纲：通过 `scripts/outline_reference.py` 在搜索前获取范文参考大纲和后续搜索建议。
 - 公文写作流程：由 `SKILL.md` 进行任务路由，按任务复杂度选择直接生成、追问、搜索、审查或严格流水线。
 - 搜索策略：`reference/search_policy.md` 保留深知搜索逻辑、素材四分类和来源限制。
 - 任务路由：`reference/task_router.md` 定义简单任务、常规任务、复杂任务和高风险任务的处理方式。
@@ -69,10 +70,14 @@ https://open.dknowc.cn/dependable/search/
 
 ## 版本说明
 
-当前 GitHub Public 版基于 `3.1.4`。
+当前 GitHub Public 版基于 `3.2.1`。
 
 本版重点同步：
 
+- 正式写作需求进入深知搜索前，优先调用公文范文大纲接口获取参考大纲和搜索建议。
+- 新增 `official-docs/outline-results/`，用于保存范文大纲 JSON 结果。
+- 深知搜索多个搜索项默认串行执行，不使用并发命令、后台任务、线程池、批量请求或多 Agent 同时调用搜索接口。
+- 素材来源说明必须由结构化 JSON 调用 `scripts/source_note_html.py` 生成，脚本会校验知识专库 URL，拒绝占位链接和伪链接。
 - 正文连续数字编号排版修复，避免第 2 项以后被误排为附件清单续行。
 - 红头文件不再保留 AI 生成提示，避免破坏国标版记位置。
 - 明确当前版本不支持自动生成 PDF；用户需要 PDF 时，先交付 Word，再由用户使用本机 Word/WPS 导出。
@@ -86,8 +91,14 @@ https://open.dknowc.cn/dependable/search/
 语法检查：
 
 ```bash
-python3 -m py_compile scripts/dkag_search.py scripts/merge_search_results.py scripts/format_document.py scripts/template_generator.py scripts/initialize.py scripts/source_note_html.py scripts/check_release.py
+python3 -m py_compile scripts/outline_reference.py scripts/dkag_search.py scripts/merge_search_results.py scripts/format_document.py scripts/template_generator.py scripts/initialize.py scripts/source_note_html.py scripts/check_release.py
 node --check scripts/register.mjs
+```
+
+范文大纲生成：
+
+```bash
+python3 scripts/outline_reference.py "请写一份关于基层治理工作的调研报告，重点包括背景、做法、问题和建议。" --output outline-test.json
 ```
 
 普通 Word 生成：
@@ -124,6 +135,6 @@ python3 scripts/source_note_html.py official-docs/input/source-note.json --outpu
 
 - 本版本不内置 API Key。
 - 用户可通过 Agent 调用 `scripts/register.mjs`，用手机号和验证码注册 MaaS 账号并获取深知可信搜索 API Key。
-- 注册成功后，Agent 自动把 API Key 写入本地 `config.ini`，用户不需要查看或手动配置 Key。
+- 注册成功后，Agent 自动把 API Key 写入本地 `config.ini`，用户不需要查看或手动配置 Key；公文范文大纲接口和深知可信搜索接口共用该配置。
 - 深知搜索、素材分类、Word 生成、异常处理等功能逻辑与自用版一致。
 - 如搜索失败或提示 API Key 未配置，请重新执行注册流程或检查本地 `config.ini` 是否存在且有效。
