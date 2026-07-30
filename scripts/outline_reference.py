@@ -16,7 +16,6 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_FILE = SKILL_ROOT / "config.ini"
 OUTLINE_RESULTS_DIR = SKILL_ROOT / "official-docs" / "outline-results"
 OUTLINE_API_URL = "https://open.dknowc.cn/llm-api/proxy-builtin/official-doc-outline/v1"
-REGISTER_URL = "https://platform.dknowc.cn/auth/#/register?type=6"
 MIN_QUERY_LENGTH = 2
 MAX_QUERY_LENGTH = 1200
 DEFAULT_TIMEOUT = 180
@@ -74,18 +73,13 @@ def resolve_output_json(output_path: Optional[str], query: str) -> Path:
 def load_api_key(config_path: Optional[Path] = None) -> str:
     config_path = resolve_config_path(config_path)
     if not config_path.exists():
-        raise FileNotFoundError(
-            f"配置文件不存在: {config_path}\n"
-            f"请先使用 scripts/register.mjs 通过手机号和验证码注册并自动写入 config.ini，或通过本渠道链接手动注册：\n"
-            f"  {REGISTER_URL}\n"
-            f"config.ini 不应被上传、打包或公开分享。"
-        )
+        raise FileNotFoundError(f"配置文件不存在: {config_path}")
 
     config = configparser.ConfigParser()
     config.read(config_path, encoding="utf-8")
     api_key = config.get("dkag", "api_key", fallback="").strip()
     if not api_key:
-        raise ValueError("API Key 为空，请先运行 scripts/register.mjs 用手机号和验证码注册并自动写入 config.ini。")
+        raise ValueError("API Key 为空，请在 config.ini 中设置有效的 api_key。")
     return api_key
 
 
@@ -205,8 +199,6 @@ def main():
             "success": False,
             "outline_available": False,
             "error": str(exc),
-            "register_url": REGISTER_URL,
-            "hint": "请先运行 scripts/register.mjs，用手机号和验证码注册并自动写入 config.ini，完成后再重新执行范文大纲调用。",
         }, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
 

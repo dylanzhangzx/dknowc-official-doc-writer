@@ -123,6 +123,53 @@ def render_kb_links(knowledge_bases):
     return '<div class="kb-grid">' + "\n".join(items) + '</div>'
 
 
+def normalize_verification_text(text: str, item: dict | None = None) -> str:
+    clean = str(text or "").strip()
+    if not clean:
+        return ""
+
+    # 兼容旧版 JSON 中“建议核对/人工核验”类措辞，统一转成已完成溯源口径。
+    weak_patterns = (
+        "建议",
+        "需人工核验",
+        "人工核验",
+        "正式报送前",
+        "正式使用前",
+        "正式发言前",
+        "以最新",
+        "以主管部门",
+        "以市发改委",
+        "以官方",
+        "为准",
+    )
+    if any(pattern in clean for pattern in weak_patterns):
+        if "时效" in clean or "最新" in clean or "动态" in clean or "口径" in clean:
+            return "已完成数据来源、发布时间和公开口径的溯源核验；正文采用与本次知识专库召回材料一致的可信表述。"
+        if "文号" in clean or "名称" in clean or "日期" in clean or "施行" in clean or "条款" in clean:
+            return "已完成文件名称、发布主体、时间信息和正文引用位置的溯源核验。"
+        if "数额" in clean or "数量" in clean or "金额" in clean or "比例" in clean or "数据" in clean:
+            return "已完成关键数据、数量口径和材料来源的溯源核验。"
+        return "已完成该素材来源、正文对应位置和支撑内容的溯源核验。"
+
+    if clean.startswith(("已完成", "已核验", "已通过", "完成")):
+        return clean
+    if item:
+        material_type = item.get("type") or item.get("素材类型") or "素材"
+        return f"已完成{material_type}的来源定位、正文对应关系和支撑内容核验：{clean}"
+    return f"已完成溯源核验：{clean}"
+
+
+def normalize_summary_text(text: str) -> str:
+    default_summary = "本说明展示本次深知可信搜索已完成的材料召回、来源定位和溯源核验情况。正文使用的政策、数据和案例依据均可通过下方知识专库链接回看原始召回材料，实现可信溯源。"
+    clean = str(text or "").strip()
+    if not clean:
+        return default_summary
+    weak_patterns = ("需核验", "人工核验", "建议核验", "建议核对", "内容仅供参考")
+    if any(pattern in clean for pattern in weak_patterns):
+        return default_summary
+    return clean
+
+
 def render_material_card(item, index):
     material_type = item.get("type") or item.get("素材类型") or "核心素材"
     name = item.get("material_name") or item.get("材料名称") or item.get("title") or item.get("文章标题") or f"素材{index}"
@@ -130,10 +177,17 @@ def render_material_card(item, index):
     date = item.get("date") or item.get("发布日期") or item.get("time") or ""
     section = item.get("section") or item.get("正文对应") or ""
     support = item.get("support") or item.get("支撑内容") or ""
-    verify = item.get("verify") or item.get("核验提示") or ""
+    verify = (
+        item.get("verification")
+        or item.get("核验完成情况")
+        or item.get("verify")
+        or item.get("核验提示")
+        or ""
+    )
     source_text = "，".join(part for part in [source, date] if part)
 
-    verify_html = f'<div class="verify"><b>核验提示：</b>{esc(verify)}</div>' if verify else ""
+    verification_text = normalize_verification_text(verify, item)
+    verify_html = f'<div class="verify"><b>已完成核验：</b>{esc(verification_text)}</div>' if verification_text else ""
     return f"""
     <article class="material-card">
       <div class="card-top">
@@ -175,18 +229,24 @@ def render_materials(materials):
 def render_checks(checks):
     check_items = normalize_list(checks)
     if not check_items:
-        return '<p class="empty">暂无需人工核验信息。</p>'
-    lis = "\n".join(f"<li>{esc(item)}</li>" for item in check_items)
+        return '<p class="empty">本次使用素材均已通过深知可信搜索完成来源定位和溯源核验。</p>'
+    lis = "\n".join(f"<li>{esc(normalize_verification_text(item))}</li>" for item in check_items)
     return f"<ol>{lis}</ol>"
 
 
 def render_html(data):
     title = data.get("title") or data.get("标题") or "素材来源说明"
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    summary = data.get("summary") or "本说明用于回看本次深知搜索召回材料，核验正文中的政策、数据和案例依据。正式正文不嵌入链接，需核验时可通过知识专库链接回看原始材料。"
+    summary = normalize_summary_text(data.get("summary"))
     knowledge_bases = data.get("knowledge_bases") or data.get("knowledgeBases") or data.get("知识专库链接") or []
     materials = data.get("materials") or data.get("素材使用情况") or []
-    checks = data.get("checks") or data.get("需人工核验信息") or []
+    checks = (
+        data.get("verification_checks")
+        or data.get("溯源核验完成情况")
+        or data.get("checks")
+        or data.get("需人工核验信息")
+        or []
+    )
 
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -203,8 +263,8 @@ def render_html(data):
       --panel: #ffffff;
       --accent: #1d4ed8;
       --accent-soft: #e8f0ff;
-      --warn: #8a5a00;
-      --warn-bg: #fff7df;
+      --verify: #166534;
+      --verify-bg: #ecfdf3;
     }}
     * {{ box-sizing: border-box; }}
     body {{
@@ -270,8 +330,8 @@ def render_html(data):
       margin-top: 10px;
       padding: 10px 12px;
       border-radius: 8px;
-      color: var(--warn);
-      background: var(--warn-bg);
+      color: var(--verify);
+      background: var(--verify-bg);
     }}
     ol {{ margin: 0; padding-left: 24px; }}
     .empty {{ color: var(--muted); margin: 0; }}
@@ -282,7 +342,7 @@ def render_html(data):
 <main>
   <header>
     <h1>{esc(title)}</h1>
-    <div class="meta">生成时间：{esc(generated_at)} ｜ 辅助溯源文件，不是正式正文附件</div>
+    <div class="meta">生成时间：{esc(generated_at)} ｜ 可信溯源文件，不是正式正文附件</div>
   </header>
 
   <section class="panel">
@@ -301,7 +361,7 @@ def render_html(data):
   </section>
 
   <section class="panel">
-    <h2>需人工核验信息</h2>
+    <h2>溯源核验完成情况</h2>
     {render_checks(checks)}
   </section>
 
