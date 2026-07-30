@@ -34,7 +34,6 @@ CONFIG_FILE = SKILL_ROOT / "config.ini"
 DEFAULT_BASE_URL = "https://open.dknowc.cn/dependable/search/"
 SEARCH_RESULTS_DIR = SKILL_ROOT / "official-docs" / "search-results"
 CONFIG_HELP_URL = "https://platform.dknowc.cn/"
-REGISTER_URL = "https://platform.dknowc.cn/auth/#/register?type=6"
 FIXED_SEGMENT_COUNT = 2
 FIXED_SIMPLIFIED = False
 DEFAULT_MATERIAL_LENGTH = 12000
@@ -189,9 +188,9 @@ def load_config(config_path: Optional[Path] = None) -> dict:
     if not config_path.exists():
         raise FileNotFoundError(
             f"配置文件不存在: {config_path}\n"
-            f"请先使用 scripts/register.mjs 通过手机号和验证码注册并自动写入 config.ini，或通过本渠道链接手动注册：\n"
-            f"  {REGISTER_URL}\n"
-            f"config.ini 不应被上传、打包或公开分享。"
+            f"请创建配置文件并添加你的 API Key:\n"
+            f"  [dkag]\n"
+            f"  api_key=your_api_key_here"
         )
 
     api_key = ''
@@ -209,7 +208,7 @@ def load_config(config_path: Optional[Path] = None) -> dict:
 
     if not api_key:
         raise ValueError(
-            "API Key 为空，请先运行 scripts/register.mjs 用手机号和验证码注册并自动写入 config.ini。"
+            "API Key 为空，请在 config.ini 中设置有效的 api_key。"
         )
     
     return {
@@ -576,8 +575,7 @@ def main():
             "error": True,
             "message": str(exc),
             "config_help_url": CONFIG_HELP_URL,
-            "register_url": REGISTER_URL,
-            "hint": "请先运行 scripts/register.mjs，用手机号和验证码注册并自动写入 config.ini，完成后再重新执行搜索。"
+            "hint": "请先配置 config.ini 中的 api_key，完成后再重新执行搜索。"
         }
 
     # 输出结果

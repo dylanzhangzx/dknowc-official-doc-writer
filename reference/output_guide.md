@@ -151,13 +151,19 @@ python3 scripts/format_document.py \
 未提供发文机关或发文字号时，红头脚本读取本机可选配置；仍未配置则使用 `XX单位`、`XX〔年份〕XX号` 占位。不得从示例或历史文档猜测真实单位，交付时应提醒用户替换占位符。
 
 异常处理：
+- 如当前环境无法运行 `python3`，或初始化结果显示 `ready=false`、`python_docx=false`、`requests=false`、`api_key_configured=false`、`config_api_key=false`，必须暂停，不得继续执行搜索、写作、Word、红头或素材来源 HTML 生成。
+- 缺失 `python-docx` 或 `requests` 时，先向用户说明影响；经用户同意后，可执行 `python3 -m pip install python-docx requests` 安装依赖，安装后重新运行初始化检查。未经用户同意不得自行安装。
+- 如用户不同意安装依赖，执行 `python3 scripts/initialize.py --decline-dependency-install` 记录拒绝状态，后续不再反复询问，但仍因缺少必备依赖暂停相关能力。
+- 如缺少 Python 或运行环境无权限安装依赖，提示用户切换到具备 Python 的 Agent/运行环境，或由用户/平台管理员先完成安装。
+- 如初始化结果显示 `api_key_configured=false`、`config_api_key=false` 或 `search_ready=false`，必须暂停并引导用户完成 Key 复用或 MaaS 注册配置，不得继续执行纯 Word 或仅基于用户材料的写作。
+- 字体不作为初始化阻断项，不主动检测、安装或引导用户安装字体。Word 文档会写入公文常用字体名称；打开端如缺少对应字体，Word/WPS 可能自动替换。
 - 普通 Word 或红头 Word 生成失败、输出文件缺失、脚本报错或关键格式检查失败时，必须暂停并向用户说明问题。
 - 请用户确认下一步：重试生成、调整正文后重试、只返回正文、暂缓生成文件，或改为生成另一种格式。
 - 未经用户确认，不得交付可能损坏、路径不存在或格式明显异常的文件。
 
 交付规则：
 - 用户要求 Word 或正式交付时，只返回最终 `.docx` 文件路径和简短说明。
-- 如初始化检查发现缺少公文标准字体，Word 可以继续生成，但交付说明必须提示：当前环境缺少标准字体，`.docx` 在打开端可能发生字体替换、分页和表格换行变化，需在安装标准字体的 Word/WPS 环境复核。
+- 交付 Word 时简单提示：文档已按公文常用字体设置；如打开端缺少对应字体，Word/WPS 可能自动替换，需以本机打开后的显示为准。
 - 当前版本不支持自动生成 PDF，也不主动提及 PDF 交付能力。用户明确要求 PDF、转 PDF、输出 PDF 时，仍只生成最终 Word 或红头 Word，并提示用户使用本机 Word/WPS 另存或导出为 PDF。
 - 不要同时发送 Markdown 草稿、完整正文、中间文件或搜索结果 JSON。
 - 执行过搜索时，正式 Word 不得内嵌素材使用情况、知识专库链接或长 URL；素材溯源应单独生成 `标题_素材来源说明.html`，不生成 Word 版素材说明。

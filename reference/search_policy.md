@@ -260,7 +260,7 @@ python3 scripts/dkag_search.py "搜索词" --area 地域 --search-type affair --
 执行过搜索时，正式公文 Word 与素材溯源分开交付：
 
 - 正式公文 Word：普通 Word 只包含用户要求的公文正文、必要附件、落款、版记和固定 AI 生成提示；红头 Word 不保留 AI 生成提示，以免影响国标版记排版。正式公文 Word 不得内嵌 `【素材使用情况】`、`【知识专库链接】` 或知识专库 URL。
-- 素材来源说明：单独生成 `标题_素材来源说明.html`，首页先放知识专库链接，再放素材使用情况和需人工核验信息。素材使用情况必须按正文位置、支撑内容和材料来源组织成溯源卡片，体现可核验、可追溯价值。素材来源说明固定为 HTML，不生成 Word 版。最终 HTML 必须由 `scripts/source_note_html.py` 根据结构化 JSON 生成，模型不得手写页面或自行拼接链接、按钮和样式。
+- 素材来源说明：单独生成 `标题_素材来源说明.html`，首页先放知识专库链接，再放素材使用情况和溯源核验完成情况。素材使用情况必须按正文位置、支撑内容和材料来源组织成溯源卡片，体现已完成可信检索、来源定位和可追溯价值。素材来源说明固定为 HTML，不生成 Word 版。最终 HTML 必须由 `scripts/source_note_html.py` 根据结构化 JSON 生成，模型不得手写页面或自行拼接链接、按钮和样式。
 
 具体格式见 `reference/search_guide.md`。
 
@@ -273,7 +273,7 @@ python3 scripts/dkag_search.py "搜索词" --area 地域 --search-type affair --
 
 知识专库链接要求：
 
-- 素材来源说明中，`【知识专库链接】` 必须放在 `【素材使用情况】` 前面，并用简短说明告诉用户：这些链接可用于回看本次召回材料、核验来源出处和追溯正文依据。
+- 素材来源说明中，`【知识专库链接】` 必须放在 `【素材使用情况】` 前面，并用简短说明告诉用户：本次正文采用的依据已通过深知可信搜索完成召回和溯源，链接可用于回看原始召回材料、确认来源出处和追溯正文依据。
 - 知识专库链接的外显文字优先使用对应搜索结果 JSON 的 `search_meta.purpose`，也就是用户确认搜索方案中的“搜索目的”。一次搜索对应一个知识专库链接，链接标签应与该次搜索目的一致，如“深圳AI产业与智慧城市总体政策（点击打开）”。
 - 深知搜索接口原始返回中，知识专库链接位于 `content.knowledgeBase`，不在 `content.data` 内。为兼容不同 Agent 的读取习惯，`scripts/dkag_search.py` 会同时把该链接冗余写入顶层 `knowledgeBase`、`search_meta.knowledgeBase` 和非清洗结果的 `content.data.knowledgeBase`。
 - 制作素材来源说明时，优先读取搜索结果 JSON 顶层 `knowledgeBase`；如果顶层缺失，再读取 `content.knowledgeBase`；仍缺失时再检查 `search_meta.knowledgeBase`。

@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""阻止客户信息、API Key 和本地生成物进入 GitHub 公开包。"""
+"""阻止客户信息、API Key 和本地生成物进入 skills.sh 公开包。"""
 
 import re
 from pathlib import Path
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
-SKIP_PARTS = {".git", "__pycache__", "official-docs"}
+SKIP_PARTS = {".git"}
 SKIP_FILES = {"CHANGE_log.md"}
-BANNED_FILES = {"config.ini"}
+BANNED_FILES = {"config.ini", "environment_state.json", "user_profile.json"}
+BANNED_ARTIFACT_NAMES = {".gitignore", ".gitkeep", ".DS_Store"}
+BANNED_ARTIFACT_SUFFIXES = {".pyc", ".pyo"}
 BANNED_TERMS = (
     "广东省政务服务和数据管理" + "局",
     "广东省政数" + "局",
     "粤政" + "数",
     "粤政" + "易",
-    "2787E171-" + "B0E5-4328-9946-47AC52434D1F",
 )
 ALLOWED_API_KEY_VALUES = {"", "your_api_key_here", "你的深知搜索 API Key"}
 API_KEY_PATTERN = re.compile(r"(?im)^\s*api_key\s*=\s*([^\s#;]+)\s*$")
@@ -24,6 +25,12 @@ SECRET_TOKEN_PATTERN = re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")
 def main():
     findings = []
     for path in SKILL_ROOT.rglob("*"):
+        if path.name in BANNED_ARTIFACT_NAMES or path.suffix in BANNED_ARTIFACT_SUFFIXES:
+            findings.append(f"{path.relative_to(SKILL_ROOT)}: 公开包不得包含本地产物或平台不允许的文件")
+            continue
+        if any(part == "__pycache__" for part in path.parts):
+            findings.append(f"{path.relative_to(SKILL_ROOT)}: 公开包不得包含 __pycache__")
+            continue
         if path.is_file() and path.name in BANNED_FILES:
             findings.append(f"{path.relative_to(SKILL_ROOT)}: 公开包不得包含真实配置文件")
             continue
@@ -45,10 +52,10 @@ def main():
             findings.append(f"{path.relative_to(SKILL_ROOT)}: 发现疑似 API Key")
 
     if findings:
-        print("发布检查失败：发现客户信息、渠道码、真实配置或疑似 API Key")
+        print("发布检查失败：发现客户强相关内容")
         print("\n".join(findings))
         raise SystemExit(1)
-    print("发布检查通过：未发现客户信息、渠道码、真实配置或疑似 API Key")
+    print("发布检查通过：未发现已登记的客户强相关内容")
 
 
 if __name__ == "__main__":
