@@ -2,8 +2,8 @@
 """检查运行环境，并按用户授权保存可选的本地写作偏好。"""
 
 import argparse
-import configparser
 import json
+import os
 import platform
 import shutil
 import sys
@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_PATH = SKILL_ROOT / "config.ini"
+API_KEY_ENV = "DKNOWC_API_KEY"
 PROFILE_PATH = SKILL_ROOT / "config" / "user_profile.json"
 ENV_STATE_PATH = SKILL_ROOT / "config" / "environment_state.json"
 SCRIPTS_DIR = SKILL_ROOT / "scripts"
@@ -59,13 +59,13 @@ def check_environment():
         "python3_available": python3_available,
         "python_docx": python_docx_available,
         "requests": requests_available,
-        "config_ini": config_status["config_ini"],
         "api_key_configured": config_status["api_key_configured"],
-        "config_api_key": config_status["api_key_configured"],
+        "api_key_env": API_KEY_ENV,
+        "api_key_source": config_status["api_key_source"],
         "api_key_hint": config_status["api_key_hint"],
         "config_issue": None if config_status["api_key_configured"] else "api_key_missing",
         "search_ready": config_status["api_key_configured"] and requests_available,
-        "search_note": None if config_status["api_key_configured"] else "config.ini 中未配置有效 api_key；必须先配置 Key 后再运行本 Skill。",
+        "search_note": None if config_status["api_key_configured"] else f"环境变量 {API_KEY_ENV} 中未配置有效 API Key；必须先配置后再运行本 Skill。",
         "font_note": "Word 文档会写入公文常用字体名称；打开端如缺少对应字体，Word/WPS 可能自动替换，需以本机打开后的显示为准。",
         "blocking_issues": blocking_issues,
         "ready": not blocking_issues,
@@ -87,33 +87,22 @@ def _module_available(module_name):
 
 
 def check_api_key_config():
-    if not CONFIG_PATH.exists():
+    api_key = os.environ.get(API_KEY_ENV, "").strip()
+    if not _valid_api_key(api_key):
         return {
-            "config_ini": False,
             "api_key_configured": False,
-            "api_key_hint": "缺少 config.ini，请先完成 MaaS 手机号验证码注册并自动写入 API Key。",
-        }
-    parser = configparser.ConfigParser()
-    try:
-        parser.read(CONFIG_PATH, encoding="utf-8")
-    except configparser.Error:
-        return {
-            "config_ini": True,
-            "api_key_configured": False,
-            "api_key_hint": "config.ini 格式异常，请重新完成 MaaS 初始化写入 API Key。",
-        }
-    api_key = parser.get("dkag", "api_key", fallback="").strip()
-    if not api_key or api_key in {"your_api_key_here", "你的深知搜索 API Key"}:
-        return {
-            "config_ini": True,
-            "api_key_configured": False,
-            "api_key_hint": "config.ini 中没有有效 API Key，请先完成 MaaS 初始化。",
+            "api_key_source": None,
+            "api_key_hint": f"缺少环境变量 {API_KEY_ENV}，请先通过 MaaS 初始化获取 API Key，并由 Agent 或平台密钥配置写入该环境变量。",
         }
     return {
-        "config_ini": True,
         "api_key_configured": True,
+        "api_key_source": "environment",
         "api_key_hint": None,
     }
+
+
+def _valid_api_key(value):
+    return bool(value) and value not in {"your_api_key_here", "你的深知搜索 API Key"}
 
 
 def main():

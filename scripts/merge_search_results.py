@@ -134,6 +134,12 @@ def merge_results(result_files: List[str]) -> Dict:
                 article.setdefault("搜索词", search_meta.get("query"))
             if search_meta.get("purpose"):
                 article.setdefault("搜索目的", search_meta.get("purpose"))
+            if article.get("源网址") and not article.get("原文链接"):
+                article["原文链接"] = article["源网址"]
+            if article.get("sourceUrl") and not article.get("原文链接"):
+                article["原文链接"] = article["sourceUrl"]
+            if article.get("policyUrl") and not article.get("知识专库原文"):
+                article["知识专库原文"] = article["policyUrl"]
             all_articles.append(article)
     
     # 重新编号段落

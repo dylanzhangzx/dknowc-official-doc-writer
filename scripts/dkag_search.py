@@ -9,6 +9,7 @@ DKAG 素材召回接口脚本
 import argparse
 import html
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -28,9 +29,9 @@ QUERY_TOO_LONG_ERROR = f"错误：查询关键词过长，超过限制（最大 
 QUERY_TOO_SHORT_ERROR = f"错误：查询关键词过短，最少需要 {MIN_QUERY_LENGTH} 个字符"
 # ==========================================
 
-# 默认配置文件路径
+# API Key 与搜索结果路径
 SKILL_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_FILE = SKILL_ROOT / "config.ini"
+API_KEY_ENV = "DKNOWC_API_KEY"
 DEFAULT_BASE_URL = "https://open.dknowc.cn/dependable/search/"
 SEARCH_RESULTS_DIR = SKILL_ROOT / "official-docs" / "search-results"
 CONFIG_HELP_URL = "https://platform.dknowc.cn/"
@@ -64,22 +65,6 @@ def is_relative_to(path: Path, parent: Path) -> bool:
         return True
     except ValueError:
         return False
-
-
-def resolve_config_path(config_path: Optional[Path] = None) -> Path:
-    """只允许读取 skill 默认 config.ini。"""
-    if config_path is None:
-        return CONFIG_FILE.resolve()
-    raw_path = config_path.expanduser()
-    if raw_path.is_absolute():
-        resolved = raw_path.resolve()
-    elif raw_path.parent == Path("."):
-        resolved = (SKILL_ROOT / raw_path.name).resolve()
-    else:
-        resolved = (SKILL_ROOT / raw_path).resolve()
-    if resolved != CONFIG_FILE.resolve():
-        raise ValueError(f"--config 只允许使用默认配置文件: {CONFIG_FILE}")
-    return resolved
 
 
 def resolve_output_json(output_path: str) -> Path:
@@ -177,42 +162,20 @@ def attach_knowledge_base_aliases(result: dict, knowledge_base_url: str) -> dict
 
 def load_config(config_path: Optional[Path] = None) -> dict:
     """
-    从配置文件加载 API Key。搜索接口地址固定为 DEFAULT_BASE_URL，不从配置读取。
-
-    配置文件格式 (config.ini):
-    [dkag]
-    api_key=your_api_key_here
+    从统一环境变量加载 API Key。搜索接口地址固定为 DEFAULT_BASE_URL。
     """
-    config_path = resolve_config_path(config_path)
+    if config_path is not None:
+        raise ValueError(f"当前版本不再读取 config.ini，请通过环境变量 {API_KEY_ENV} 配置 API Key。")
 
-    if not config_path.exists():
-        raise FileNotFoundError(
-            f"配置文件不存在: {config_path}\n"
-            f"请创建配置文件并添加你的 API Key:\n"
-            f"  [dkag]\n"
-            f"  api_key=your_api_key_here"
-        )
-
-    api_key = ''
-    try:
-        import configparser
-        config = configparser.ConfigParser()
-        config.read(config_path, encoding='utf-8')
-        api_key = config.get('dkag', 'api_key', fallback='')
-    except Exception:
-        # 简单的文件读取方式（兼容无 configparser 的情况）
-        with open(config_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.startswith('api_key='):
-                    api_key = line.split('=', 1)[1].strip()
-
-    if not api_key:
+    api_key = os.environ.get(API_KEY_ENV, "").strip()
+    if not api_key or api_key in {"your_api_key_here", "你的深知搜索 API Key"}:
         raise ValueError(
-            "API Key 为空，请在 config.ini 中设置有效的 api_key。"
+            f"API Key 为空，请通过环境变量 {API_KEY_ENV} 配置有效 API Key。"
         )
     
     return {
-        "api_key": api_key
+        "api_key": api_key,
+        "api_key_source": "environment",
     }
 
 
@@ -267,6 +230,23 @@ def clean_dkag_response(api_response: dict) -> dict:
                 "数据源": art.get("数据源", "未知来源"),
                 "段落": []
             }
+            for key in ("源网址", "sourceUrl", "source_url", "原文链接", "原文地址", "文章链接", "url", "URL"):
+                if art.get(key):
+                    cleaned_art["源网址"] = str(art[key]).strip()
+                    break
+            if art.get("办理地域"):
+                cleaned_art["办理地域"] = str(art["办理地域"]).strip()
+            if art.get("发布日期可信度"):
+                cleaned_art["发布日期可信度"] = str(art["发布日期可信度"]).strip()
+            # 保留接口返回的原文地址，供可信溯源报告展示“查看原文”。
+            for key in ("sourceUrl", "source_url", "原文链接", "原文地址", "文章链接", "url", "URL"):
+                if art.get(key):
+                    cleaned_art["原文链接"] = str(art[key]).strip()
+                    break
+            for key in ("policyUrl", "policy_url", "知识专库原文"):
+                if art.get(key):
+                    cleaned_art["知识专库原文"] = str(art[key]).strip()
+                    break
 
             # 遍历段落并清洗
             paragraphs = art.get("段落", [])
@@ -299,6 +279,7 @@ def clean_dkag_response(api_response: dict) -> dict:
                     # 分配全局唯一的自增 ID
                     cleaned_art["段落"].append({
                         "id": global_id_counter,
+                        "标题": p_title,
                         "内容": content
                     })
                     global_id_counter += 1
@@ -368,8 +349,7 @@ def dkag_search(
         time: 生效日期（可选），如"2026年"、"2025年08月"、"2025年08月15日"。
               不建议传"2023-2025"这类范围，脚本会自动忽略。
         purpose: 搜索方案中的搜索目的，用于素材来源说明中的知识专库链接显示名。
-        api_key: API 密钥（可选，如不传则从配置文件读取）
-        config_path: 配置文件路径（可选）
+        api_key: API 密钥（可选，如不传则从 DKNOWC_API_KEY 读取）
         clean: 是否对返回结果进行数据清洗（默认 False）
         policy: 是否返回规范性文件清单policyFiles（默认 False）
         full: 是否返回文章全文（return_full_content，默认 False）
@@ -528,8 +508,7 @@ def main():
     parser.add_argument("--area", help="用户所属地域（默认: 中国），如: 广东省、北京市")
     parser.add_argument("--time", help="生效日期范围，如: 2026年、2025年08月、2025年08月15日")
     parser.add_argument("--purpose", help="搜索方案中的搜索目的，用于知识专库链接外显文字（内部字段，不向用户展示）")
-    parser.add_argument("--api-key", help="API 密钥（可选，默认从配置文件读取）")
-    parser.add_argument("--config", help=f"配置文件路径（默认: {CONFIG_FILE}）")
+    parser.add_argument("--api-key", help=f"API 密钥（可选，默认从环境变量 {API_KEY_ENV} 读取）")
     parser.add_argument("--json", action="store_true", help="以 JSON 格式输出")
     parser.add_argument("--clean", action="store_true", help="对返回结果进行数据清洗（去除HTML转义、网页干扰词等）")
     parser.add_argument("--policy", action="store_true", help="返回规范性文件清单（policyFiles）")
@@ -562,7 +541,6 @@ def main():
             time=args.time,
             purpose=args.purpose,
             api_key=args.api_key,
-            config_path=Path(args.config) if args.config else None,
             clean=args.clean,
             policy=args.policy,
             full=args.full,
@@ -575,7 +553,7 @@ def main():
             "error": True,
             "message": str(exc),
             "config_help_url": CONFIG_HELP_URL,
-            "hint": "请先配置 config.ini 中的 api_key，完成后再重新执行搜索。"
+            "hint": f"请先配置环境变量 {API_KEY_ENV}，完成后再重新执行搜索。"
         }
 
     # 输出结果

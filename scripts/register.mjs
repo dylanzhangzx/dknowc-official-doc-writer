@@ -1,25 +1,23 @@
 #!/usr/bin/env node
-// 国内 MaaS headless 注册助手（供 skills.sh skill 调用；纯 node，内置 fetch，无三方依赖）。
-//   node register.mjs scan-reuse
-//   node register.mjs reuse-key --from <候选目录名或 slug>
+// 国内 MaaS headless 注册助手（供 skillhub skill 调用；纯 node，内置 fetch，无三方依赖）。
 //   node register.mjs [--base URL] send     --phone <p>
-//   node register.mjs [--base URL] register --phone <p> --vcode <c> [--type 6] [--organ ..] [--name ..] [--channel ..] [--password ..] [--new-key] [--config ../config.ini]
+//   node register.mjs [--base URL] register --phone <p> --vcode <c> [--type 6] [--organ ..] [--name ..] [--channel ..] [--source ..] [--password ..] [--new-key]
 // 无需 cookie / 加密 / 登录态。默认打生产，--base 可切测试环境。
 
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import fs from "fs";
+import os from "os";
+import path from "path";
 
 const DEFAULT_BASE = "https://platform.dknowc.cn/auth/home/userAuto";
 const DEFAULT_OPEN_BASE = "https://open.dknowc.cn";
 const DEFAULT_CHANNEL = "8C8D411C-6A46-4E99-887D-87D9A1329930";
 const DEFAULT_TYPE = "6";
-const DEFAULT_GRANT_TOKEN = "OzqfOqHhYHzIPxRQmQyG8dMzRtKgiuLc";
+const DEFAULT_SOURCE = "agent";
+const API_KEY_ENV = "DKNOWC_API_KEY";
 const MAAS_PLATFORM_URL = "https://platform.dknowc.cn/";
 const FALLBACK_REGISTER_URL = MAAS_PLATFORM_URL;
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SKILL_ROOT = path.resolve(__dirname, "..");
-const DEFAULT_CONFIG_PATH = path.join(SKILL_ROOT, "config.ini");
+const ZSHRC_START = "# >>> dknowc official doc writer api key >>>";
+const ZSHRC_END = "# <<< dknowc official doc writer api key <<<";
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -88,93 +86,6 @@ function genPassword() {
   return chars.join("");
 }
 
-function resolveConfigPath(value) {
-  const raw = value && value !== true ? String(value) : DEFAULT_CONFIG_PATH;
-  const resolved = path.resolve(SKILL_ROOT, raw);
-  if (resolved !== DEFAULT_CONFIG_PATH) {
-    throw new Error(`只允许写入本 Skill 根目录下的 config.ini: ${DEFAULT_CONFIG_PATH}`);
-  }
-  return resolved;
-}
-
-function readJsonIfExists(filePath) {
-  try {
-    if (!fs.existsSync(filePath)) return {};
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch {
-    return {};
-  }
-}
-
-function readApiKeyIfExists(filePath) {
-  try {
-    if (!fs.existsSync(filePath)) return "";
-    const text = fs.readFileSync(filePath, "utf8");
-    const match = text.match(/^\s*api_key\s*=\s*(sk-[A-Za-z0-9_-]+)\s*$/m);
-    return match ? match[1] : "";
-  } catch {
-    return "";
-  }
-}
-
-function resolveSkillsRoot() {
-  return path.dirname(SKILL_ROOT);
-}
-
-function findReusableConfigs(skillsRoot) {
-  let entries = [];
-  try {
-    entries = fs.readdirSync(skillsRoot, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-
-  const currentRoot = path.resolve(SKILL_ROOT);
-  const candidates = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !/^dknowc/i.test(entry.name)) continue;
-    const dir = path.resolve(skillsRoot, entry.name);
-    if (dir === currentRoot) continue;
-    const configPath = path.join(dir, "config.ini");
-    const apiKey = readApiKeyIfExists(configPath);
-    if (!apiKey) continue;
-    const meta = readJsonIfExists(path.join(dir, "_meta.json"));
-    candidates.push({
-      id: entry.name,
-      slug: typeof meta.slug === "string" && meta.slug ? meta.slug : entry.name,
-      name: typeof meta.name === "string" && meta.name ? meta.name : null,
-      displayName: typeof meta.displayName === "string" && meta.displayName ? meta.displayName : null,
-      version: typeof meta.version === "string" && meta.version ? meta.version : null,
-      hasApiKey: true,
-    });
-  }
-  return candidates;
-}
-
-function findReusableConfigByRef(skillsRoot, ref) {
-  const candidates = findReusableConfigs(skillsRoot);
-  const selected = candidates.find((item) => item.id === ref || item.slug === ref);
-  if (!selected) return { selected: null, apiKey: "" };
-  const apiKey = readApiKeyIfExists(path.join(skillsRoot, selected.id, "config.ini"));
-  return { selected, apiKey };
-}
-
-function saveApiKey(apiKey, configPath) {
-  if (!apiKey || !apiKey.startsWith("sk-")) {
-    throw new Error("接口未返回有效 API Key");
-  }
-  const content = [
-    "# 深知可信搜索 API 配置",
-    "# 本文件由 scripts/register.mjs 在用户提供手机号和验证码后自动生成。",
-    "# 不要上传、打包或公开分享本文件。",
-    "",
-    "[dkag]",
-    `api_key=${apiKey}`,
-    "",
-  ].join("\n");
-  fs.writeFileSync(configPath, content, { encoding: "utf8", mode: 0o600 });
-}
-
 async function createNewApiKey(openBase, existingApiKey, name, remark) {
   const result = await postWithBearer(
     openBase.replace(/\/$/, "") + "/open-api/maas/api-key/create",
@@ -185,60 +96,46 @@ async function createNewApiKey(openBase, existingApiKey, name, remark) {
   return { result, apiKey };
 }
 
+function shellSingleQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function writeApiKeyToZshrc(apiKey) {
+  const zshrcPath = path.join(os.homedir(), ".zshrc");
+  const block = [
+    ZSHRC_START,
+    `export ${API_KEY_ENV}=${shellSingleQuote(apiKey)}`,
+    ZSHRC_END,
+    "",
+  ].join("\n");
+  let existing = "";
+  try {
+    existing = fs.existsSync(zshrcPath) ? fs.readFileSync(zshrcPath, "utf8") : "";
+  } catch (e) {
+    return { written: false, path: zshrcPath, error: e && e.message ? e.message : String(e) };
+  }
+
+  const pattern = new RegExp(`${escapeRegExp(ZSHRC_START)}[\\s\\S]*?${escapeRegExp(ZSHRC_END)}\\n?`, "m");
+  const next = pattern.test(existing)
+    ? existing.replace(pattern, block)
+    : `${existing}${existing && !existing.endsWith("\n") ? "\n" : ""}${block}`;
+
+  try {
+    fs.writeFileSync(zshrcPath, next, { encoding: "utf8", mode: 0o600 });
+    return { written: true, path: zshrcPath, error: null };
+  } catch (e) {
+    return { written: false, path: zshrcPath, error: e && e.message ? e.message : String(e) };
+  }
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function main() {
   const a = parseArgs(process.argv.slice(2));
   const base = a.base || DEFAULT_BASE;
   const cmd = a._[0];
-
-  if (cmd === "scan-reuse") {
-    const skillsRoot = resolveSkillsRoot();
-    const candidates = findReusableConfigs(skillsRoot);
-    console.log(JSON.stringify({
-      status: true,
-      skillsRoot: path.basename(skillsRoot),
-      candidates,
-    }));
-    process.exit(0);
-  }
-
-  if (cmd === "reuse-key") {
-    const ref = a.from && a.from !== true ? String(a.from) : "";
-    if (!ref) {
-      console.error("缺少 --from");
-      process.exit(2);
-    }
-    const skillsRoot = resolveSkillsRoot();
-    const { selected, apiKey } = findReusableConfigByRef(skillsRoot, ref);
-    if (!selected || !apiKey) {
-      console.log(JSON.stringify({ status: false, msg: "未找到可复用的深知系列 Skill API Key" }));
-      process.exit(1);
-    }
-    try {
-      const configPath = resolveConfigPath(a.config);
-      saveApiKey(apiKey, configPath);
-      console.log(JSON.stringify({
-        status: true,
-        msg: "已复用已有深知系列 Skill API Key",
-        source: {
-          id: selected.id,
-          slug: selected.slug,
-          name: selected.name,
-          displayName: selected.displayName,
-          version: selected.version,
-        },
-        configSaved: true,
-        configPath: path.relative(SKILL_ROOT, configPath),
-      }));
-      process.exit(0);
-    } catch (e) {
-      console.log(JSON.stringify({
-        status: false,
-        msg: "复用配置写入失败",
-        saveError: e && e.message ? e.message : String(e),
-      }));
-      process.exit(1);
-    }
-  }
 
   if (cmd === "send") {
     if (!a.phone) { console.error("缺少 --phone"); process.exit(2); }
@@ -260,7 +157,7 @@ async function main() {
       apiKeyName: a["apikey-name"] && a["apikey-name"] !== true ? a["apikey-name"] : "agent-key",
     };
     payload.channel = a.channel && a.channel !== true ? a.channel : DEFAULT_CHANNEL;
-    payload.grantToken = a["grant-token"] && a["grant-token"] !== true ? a["grant-token"] : DEFAULT_GRANT_TOKEN;
+    payload.source = a.source && a.source !== true ? a.source : DEFAULT_SOURCE;
     const r = await post(base + "/register", payload);
     const data = r.data || {};
     const ok = Boolean(r.status) && Boolean(data.apiKey);
@@ -271,7 +168,7 @@ async function main() {
       const keyName = a["new-key-name"] && a["new-key-name"] !== true ? a["new-key-name"] : payload.apiKeyName;
       const keyRemark = a["new-key-remark"] && a["new-key-remark"] !== true
         ? a["new-key-remark"]
-        : "由 skills.sh 深知公文写作按用户要求重新生成";
+        : "由 SkillHub 深知公文写作按用户要求重新生成";
       const { result, apiKey } = await createNewApiKey(
         a["open-base"] && a["open-base"] !== true ? a["open-base"] : DEFAULT_OPEN_BASE,
         data.apiKey,
@@ -286,36 +183,35 @@ async function main() {
         apiKeyToSave = "";
       }
     }
-    let saved = false;
-    let configPath = null;
-    let saveError = null;
-    if (ok && apiKeyToSave) {
-      try {
-        configPath = resolveConfigPath(a.config);
-        saveApiKey(apiKeyToSave, configPath);
-        saved = true;
-      } catch (e) {
-        saveError = e && e.message ? e.message : String(e);
-      }
-    }
+    const zshrcWrite = ok && apiKeyToSave && !newKeyError && !a["no-zshrc"]
+      ? writeApiKeyToZshrc(apiKeyToSave)
+      : { written: false, path: path.join(os.homedir(), ".zshrc"), error: null };
     console.log(JSON.stringify({
-      status: ok && saved && !newKeyError,
+      status: ok && Boolean(apiKeyToSave) && !newKeyError,
       msg: r.msg,
       url: data.url || null,
       existed: Boolean(data.existed),
       keyCreatedByRegister: Boolean(data.keyCreated),
       newKeyRequested: Boolean(a["new-key"]),
       newKeyCreated,
-      configSaved: saved,
-      configPath: saved ? path.relative(SKILL_ROOT, configPath) : null,
+      envName: API_KEY_ENV,
+      apiKey: apiKeyToSave,
+      apiKeyMasked: apiKeyToSave ? `${apiKeyToSave.slice(0, 7)}...${apiKeyToSave.slice(-4)}` : null,
+      envWriteRequired: false,
+      envWriteTarget: zshrcWrite.path,
+      envWriteSucceeded: Boolean(zshrcWrite.written),
+      envWriteError: zshrcWrite.error,
+      envWriteInstruction: zshrcWrite.written
+        ? `已写入 ${zshrcWrite.path}。当前任务可继续使用返回的 apiKey；后续新对话如仍检测不到 ${API_KEY_ENV}，请重启 WorkBuddy 后再试。`
+        : `未能写入 ${zshrcWrite.path}，请由 Agent 或平台密钥配置将返回的 apiKey 写入环境变量 ${API_KEY_ENV}。`,
+      currentSessionInstruction: `当前任务继续执行初始化时，请用本次返回的 apiKey 临时注入环境变量 ${API_KEY_ENV}，不得向用户展示完整 Key。`,
       newKeyError,
-      saveError,
       fallbackRegisterUrl: FALLBACK_REGISTER_URL,
     }));
-    process.exit(ok && saved && !newKeyError ? 0 : 1);
+    process.exit(ok && Boolean(apiKeyToSave) && !newKeyError ? 0 : 1);
   }
 
-  console.error("用法: node register.mjs <scan-reuse|reuse-key|send|register> ...");
+  console.error("用法: node register.mjs <send|register> ...");
   process.exit(2);
 }
 

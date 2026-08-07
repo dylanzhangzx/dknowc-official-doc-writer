@@ -151,11 +151,11 @@ python3 scripts/format_document.py \
 未提供发文机关或发文字号时，红头脚本读取本机可选配置；仍未配置则使用 `XX单位`、`XX〔年份〕XX号` 占位。不得从示例或历史文档猜测真实单位，交付时应提醒用户替换占位符。
 
 异常处理：
-- 如当前环境无法运行 `python3`，或初始化结果显示 `ready=false`、`python_docx=false`、`requests=false`、`api_key_configured=false`、`config_api_key=false`，必须暂停，不得继续执行搜索、写作、Word、红头或素材来源 HTML 生成。
+- 如当前环境无法运行 `python3`，或初始化结果显示 `ready=false`、`python_docx=false`、`requests=false`、`api_key_configured=false`，必须暂停，不得继续执行搜索、写作、Word、红头或可信溯源报告 HTML 生成。
 - 缺失 `python-docx` 或 `requests` 时，先向用户说明影响；经用户同意后，可执行 `python3 -m pip install python-docx requests` 安装依赖，安装后重新运行初始化检查。未经用户同意不得自行安装。
 - 如用户不同意安装依赖，执行 `python3 scripts/initialize.py --decline-dependency-install` 记录拒绝状态，后续不再反复询问，但仍因缺少必备依赖暂停相关能力。
 - 如缺少 Python 或运行环境无权限安装依赖，提示用户切换到具备 Python 的 Agent/运行环境，或由用户/平台管理员先完成安装。
-- 如初始化结果显示 `api_key_configured=false`、`config_api_key=false` 或 `search_ready=false`，必须暂停并引导用户完成 Key 复用或 MaaS 注册配置，不得继续执行纯 Word 或仅基于用户材料的写作。
+- 如初始化结果显示 `api_key_configured=false` 或 `search_ready=false`，必须暂停并引导用户完成 MaaS 注册获取 Key；注册脚本会将 `DKNOWC_API_KEY` 写入本机 `~/.zshrc`，当前任务使用脚本返回的 Key 临时注入环境变量继续初始化。不得继续执行纯 Word 或仅基于用户材料的写作。
 - 字体不作为初始化阻断项，不主动检测、安装或引导用户安装字体。Word 文档会写入公文常用字体名称；打开端如缺少对应字体，Word/WPS 可能自动替换。
 - 普通 Word 或红头 Word 生成失败、输出文件缺失、脚本报错或关键格式检查失败时，必须暂停并向用户说明问题。
 - 请用户确认下一步：重试生成、调整正文后重试、只返回正文、暂缓生成文件，或改为生成另一种格式。
@@ -166,8 +166,8 @@ python3 scripts/format_document.py \
 - 交付 Word 时简单提示：文档已按公文常用字体设置；如打开端缺少对应字体，Word/WPS 可能自动替换，需以本机打开后的显示为准。
 - 当前版本不支持自动生成 PDF，也不主动提及 PDF 交付能力。用户明确要求 PDF、转 PDF、输出 PDF 时，仍只生成最终 Word 或红头 Word，并提示用户使用本机 Word/WPS 另存或导出为 PDF。
 - 不要同时发送 Markdown 草稿、完整正文、中间文件或搜索结果 JSON。
-- 执行过搜索时，正式 Word 不得内嵌素材使用情况、知识专库链接或长 URL；素材溯源应单独生成 `标题_素材来源说明.html`，不生成 Word 版素材说明。
-- 如同时返回素材来源说明 HTML，必须说明它是辅助溯源文件，不是正式正文附件。
+- 执行过搜索时，正式 Word 不得内嵌来源角标、素材使用情况、知识专库链接或长 URL；可信溯源应单独生成 `标题_可信溯源报告.html`，不生成 Word 版溯源报告。
+- 如同时返回可信溯源报告 HTML，必须说明它是辅助核验文件，不是正式正文附件。
 - 生成的普通 Word 文档最末尾必须保留“【AI生成提示】内容由AI生成，内容仅供参考。”，使用较小灰色字体；不要添加横线、边框或其他不易删除的分隔元素。红头文件为保证国标版记排版，不保留该提示；红头脚本会自动移除普通 Word 中已有提示，不得再手动补回。
 - Markdown 草稿属于内部中间文件，只能用于调用 Word 生成脚本；生成后必须继续生成 `.docx`，不得向用户展示、链接、发送或让用户审阅 `.md`。
 - 多行正文必须通过临时正文文件传给 `scripts/format_document.py`；不得把整篇正文直接作为 `--text` 参数，也不得绕过排版脚本用临时 Python 直接手写 `python-docx` 作为正式交付。

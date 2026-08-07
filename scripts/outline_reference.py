@@ -2,8 +2,8 @@
 """调用公文范文大纲接口，生成写作结构参考。"""
 
 import argparse
-import configparser
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -13,7 +13,7 @@ import requests
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
-CONFIG_FILE = SKILL_ROOT / "config.ini"
+API_KEY_ENV = "DKNOWC_API_KEY"
 OUTLINE_RESULTS_DIR = SKILL_ROOT / "official-docs" / "outline-results"
 OUTLINE_API_URL = "https://open.dknowc.cn/llm-api/proxy-builtin/official-doc-outline/v1"
 MIN_QUERY_LENGTH = 2
@@ -33,21 +33,6 @@ def safe_filename(text: str, max_length: int = 60) -> str:
     name = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in text.strip())
     name = "_".join(part for part in name.split("_") if part)
     return (name or "outline")[:max_length]
-
-
-def resolve_config_path(config_path: Optional[Path] = None) -> Path:
-    if config_path is None:
-        return CONFIG_FILE.resolve()
-    raw_path = config_path.expanduser()
-    if raw_path.is_absolute():
-        resolved = raw_path.resolve()
-    elif raw_path.parent == Path("."):
-        resolved = (SKILL_ROOT / raw_path.name).resolve()
-    else:
-        resolved = (SKILL_ROOT / raw_path).resolve()
-    if resolved != CONFIG_FILE.resolve():
-        raise ValueError(f"--config 只允许使用默认配置文件: {CONFIG_FILE}")
-    return resolved
 
 
 def resolve_output_json(output_path: Optional[str], query: str) -> Path:
@@ -71,15 +56,12 @@ def resolve_output_json(output_path: Optional[str], query: str) -> Path:
 
 
 def load_api_key(config_path: Optional[Path] = None) -> str:
-    config_path = resolve_config_path(config_path)
-    if not config_path.exists():
-        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+    if config_path is not None:
+        raise ValueError(f"当前版本不再读取 config.ini，请通过环境变量 {API_KEY_ENV} 配置 API Key。")
 
-    config = configparser.ConfigParser()
-    config.read(config_path, encoding="utf-8")
-    api_key = config.get("dkag", "api_key", fallback="").strip()
-    if not api_key:
-        raise ValueError("API Key 为空，请在 config.ini 中设置有效的 api_key。")
+    api_key = os.environ.get(API_KEY_ENV, "").strip()
+    if not api_key or api_key in {"your_api_key_here", "你的深知搜索 API Key"}:
+        raise ValueError(f"API Key 为空，请通过环境变量 {API_KEY_ENV} 配置有效 API Key。")
     return api_key
 
 
@@ -118,7 +100,7 @@ def build_output(query: str, status_code: int, body: dict | str, elapsed: float)
             "url": OUTLINE_API_URL,
             "elapsed_seconds": elapsed,
             "status_code": status_code,
-            "auth": "api-key from config.ini",
+            "auth": f"api-key from {API_KEY_ENV}",
         },
         "raw_response": body,
     }
@@ -164,12 +146,11 @@ def main():
     parser.add_argument("query", help="用户写作需求，包含文种、主题、用途和写作重点")
     parser.add_argument("--output", help="输出 JSON 文件名或 official-docs/outline-results/ 下的路径")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="请求超时时间，默认 180 秒")
-    parser.add_argument("--config", type=Path, help="配置文件路径，仅允许默认 config.ini")
     args = parser.parse_args()
 
     try:
         query = validate_query(args.query)
-        api_key = load_api_key(args.config)
+        api_key = load_api_key()
         output_path = resolve_output_json(args.output, query)
         status_code, body, elapsed = call_outline_api(query, api_key, args.timeout)
         result = build_output(query, status_code, body, elapsed)

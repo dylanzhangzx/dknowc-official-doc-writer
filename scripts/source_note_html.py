@@ -1,391 +1,175 @@
 #!/usr/bin/env python3
-"""生成素材来源说明 HTML。"""
+"""把写作流程的结构化正文/素材 JSON 转成可信搜索同款溯源报告。"""
+
+from __future__ import annotations
 
 import argparse
-import html
+import importlib.util
 import json
 import re
-from datetime import datetime
+import unicodedata
 from pathlib import Path
-from urllib.parse import urlparse
 
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
-OFFICIAL_DOCS_DIR = SKILL_ROOT / "official-docs"
-INPUT_DIR = OFFICIAL_DOCS_DIR / "input"
-OUTPUT_DIR = OFFICIAL_DOCS_DIR / "output"
-SEARCH_RESULTS_DIR = OFFICIAL_DOCS_DIR / "search-results"
-ALLOWED_INPUT_DIRS = (INPUT_DIR, OUTPUT_DIR, SEARCH_RESULTS_DIR)
+INPUT_DIR = SKILL_ROOT / "official-docs" / "input"
+OUTPUT_DIR = SKILL_ROOT / "official-docs" / "output"
+SEARCH_RESULTS_DIR = SKILL_ROOT / "official-docs" / "search-results"
 
 
-def is_relative_to(path: Path, parent: Path) -> bool:
+def load_renderer():
+    path = Path(__file__).with_name("render_trace_html.py")
+    spec = importlib.util.spec_from_file_location("dknowc_trace_renderer", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"无法加载可信溯源报告模板: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def resolve_input(value: str) -> Path:
+    raw = Path(value).expanduser()
+    path = raw.resolve() if raw.is_absolute() else (INPUT_DIR / raw.name).resolve()
+    if path.suffix.lower() != ".json":
+        raise ValueError("输入文件必须是 JSON")
     try:
-        path.relative_to(parent)
-        return True
-    except ValueError:
-        return False
-
-
-def resolve_input_json(file_path: str) -> Path:
-    raw_path = Path(file_path).expanduser()
-    if raw_path.is_absolute():
-        resolved = raw_path.resolve()
-    elif raw_path.parent == Path("."):
-        resolved = (INPUT_DIR / raw_path.name).resolve()
-    else:
-        resolved = (SKILL_ROOT / raw_path).resolve()
-
-    if resolved.suffix.lower() != ".json":
-        raise ValueError(f"只允许读取 JSON 文件: {file_path}")
-    if not any(is_relative_to(resolved, allowed.resolve()) for allowed in ALLOWED_INPUT_DIRS):
-        raise ValueError(f"输入文件必须位于 skill 工作目录内: {file_path}")
-    if not resolved.exists():
-        raise FileNotFoundError(f"输入文件不存在: {resolved}")
-    return resolved
-
-
-def resolve_output_html(file_path: str, title: str) -> Path:
-    if file_path:
-        raw_path = Path(file_path).expanduser()
-        if raw_path.is_absolute():
-            resolved = raw_path.resolve()
-        elif raw_path.parent == Path("."):
-            resolved = (OUTPUT_DIR / raw_path.name).resolve()
-        else:
-            resolved = (SKILL_ROOT / raw_path).resolve()
-    else:
-        resolved = (OUTPUT_DIR / f"{safe_filename(title)}_素材来源说明.html").resolve()
-
-    if resolved.suffix.lower() not in (".html", ".htm"):
-        raise ValueError("输出文件必须是 .html 或 .htm")
-    if not is_relative_to(resolved, OUTPUT_DIR.resolve()):
-        raise ValueError(f"输出文件必须位于 official-docs/output/: {file_path}")
-    resolved.parent.mkdir(parents=True, exist_ok=True)
-    return unique_output_path(resolved)
-
-
-def unique_output_path(path: Path) -> Path:
+        path.relative_to(INPUT_DIR.resolve())
+    except ValueError as exc:
+        raise ValueError(f"输入文件必须位于 official-docs/input/: {value}") from exc
     if not path.exists():
-        return path
-    stem = path.stem
-    suffix = path.suffix
-    for idx in range(1, 1000):
-        candidate = path.with_name(f"{stem}_v{idx}{suffix}")
-        if not candidate.exists():
-            return candidate
-    raise RuntimeError("无法生成不重名的输出文件")
+        raise FileNotFoundError(f"输入文件不存在: {path}")
+    return path
 
 
-def safe_filename(text: str) -> str:
-    clean = re.sub(r'[\\/:*?"<>|\s]+', "_", text.strip())
-    clean = clean.strip("_")
-    return clean[:80] or "素材来源说明"
+def safe_output(value: str, title: str) -> Path:
+    if value:
+        raw = Path(value).expanduser()
+        path = raw.resolve() if raw.is_absolute() else (OUTPUT_DIR / raw.name).resolve()
+    else:
+        safe_title = "".join("_" if char in '\\/:*?"<>| ' else char for char in title).strip("_")
+        path = (OUTPUT_DIR / f"{safe_title[:80] or '可信溯源报告'}_可信溯源报告.html").resolve()
+    if path.suffix.lower() not in {".html", ".htm"}:
+        path = path.with_suffix(".html")
+    try:
+        path.relative_to(OUTPUT_DIR.resolve())
+    except ValueError as exc:
+        raise ValueError("输出文件必须位于 official-docs/output/") from exc
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
-def esc(value) -> str:
-    return html.escape(str(value or ""), quote=True)
+def first_value(item: dict, *keys: str) -> str:
+    for key in keys:
+        value = item.get(key)
+        if value not in (None, "", [], {}):
+            return str(value)
+    return ""
 
 
-def validate_kb_url(url: str, index: int) -> str:
-    clean_url = str(url or "").strip()
-    parsed = urlparse(clean_url)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise ValueError(f"知识专库链接{index}不是有效的 http/https URL，不能生成素材来源说明: {clean_url}")
-    if parsed.scheme == "javascript" or clean_url.lower().startswith(("javascript:", "alert(")):
-        raise ValueError(f"知识专库链接{index}疑似伪链接，不能生成素材来源说明: {clean_url}")
-    if "XXX" in clean_url or "占位" in clean_url:
-        raise ValueError(f"知识专库链接{index}包含占位内容，不能生成素材来源说明: {clean_url}")
-    return clean_url
+def normalize_title(value: str) -> str:
+    """仅用于兼容旧结果的标题兜底匹配；新流程优先使用素材中的 source_url。"""
+    text = unicodedata.normalize("NFKC", str(value or "")).lower()
+    text = re.sub(r"[《》〈〉「」『』\[\]【】()（）]", "", text)
+    text = re.sub(r"\s+", "", text)
+    return text
 
 
-def normalize_list(value):
-    if not value:
-        return []
-    if isinstance(value, list):
-        return value
-    return [value]
-
-
-def render_kb_links(knowledge_bases):
-    items = []
-    for index, item in enumerate(normalize_list(knowledge_bases), 1):
-        label = item.get("label") or item.get("purpose") or item.get("query") or f"知识专库链接{index}"
-        url = item.get("url") or item.get("knowledgeBase")
-        if not url:
+def load_source_index() -> dict:
+    """从本地搜索结果按文章标题建立原文 URL 索引，补齐上游整理时遗漏的字段。"""
+    index = {}
+    if not SEARCH_RESULTS_DIR.exists():
+        return index
+    for path in SEARCH_RESULTS_DIR.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             continue
-        url = validate_kb_url(url, index)
-        items.append(
-            f'<a class="kb-link" href="{esc(url)}" target="_blank" rel="noopener noreferrer">'
-            f'<span>{esc(label)}</span><small>点击打开</small></a>'
-        )
-    if not items:
-        return '<p class="empty">未提供知识专库链接。</p>'
-    return '<div class="kb-grid">' + "\n".join(items) + '</div>'
+        articles = data.get("articles", [])
+        if not isinstance(articles, list):
+            content = data.get("content", {})
+            payload = content.get("data", {}) if isinstance(content, dict) else {}
+            articles = payload.get("检索文章", []) if isinstance(payload, dict) else []
+        for article in articles:
+            if not isinstance(article, dict):
+                continue
+            title = first_value(article, "文章标题", "title", "标题")
+            if not title:
+                continue
+            source_url = first_value(article, "源网址", "原文链接", "sourceUrl", "source_url", "url")
+            policy_url = first_value(article, "知识专库原文", "policyUrl", "policy_url")
+            if source_url or policy_url:
+                record = {"source_url": source_url, "policy_url": policy_url}
+                index.setdefault(title, record)
+                index.setdefault(normalize_title(title), record)
+    return index
 
 
-def normalize_verification_text(text: str, item: dict | None = None) -> str:
-    clean = str(text or "").strip()
-    if not clean:
-        return ""
-
-    # 兼容旧版 JSON 中“建议核对/人工核验”类措辞，统一转成已完成溯源口径。
-    weak_patterns = (
-        "建议",
-        "需人工核验",
-        "人工核验",
-        "正式报送前",
-        "正式使用前",
-        "正式发言前",
-        "以最新",
-        "以主管部门",
-        "以市发改委",
-        "以官方",
-        "为准",
-    )
-    if any(pattern in clean for pattern in weak_patterns):
-        if "时效" in clean or "最新" in clean or "动态" in clean or "口径" in clean:
-            return "已完成数据来源、发布时间和公开口径的溯源核验；正文采用与本次知识专库召回材料一致的可信表述。"
-        if "文号" in clean or "名称" in clean or "日期" in clean or "施行" in clean or "条款" in clean:
-            return "已完成文件名称、发布主体、时间信息和正文引用位置的溯源核验。"
-        if "数额" in clean or "数量" in clean or "金额" in clean or "比例" in clean or "数据" in clean:
-            return "已完成关键数据、数量口径和材料来源的溯源核验。"
-        return "已完成该素材来源、正文对应位置和支撑内容的溯源核验。"
-
-    if clean.startswith(("已完成", "已核验", "已通过", "完成")):
-        return clean
-    if item:
-        material_type = item.get("type") or item.get("素材类型") or "素材"
-        return f"已完成{material_type}的来源定位、正文对应关系和支撑内容核验：{clean}"
-    return f"已完成溯源核验：{clean}"
-
-
-def normalize_summary_text(text: str) -> str:
-    default_summary = "本说明展示本次深知可信搜索已完成的材料召回、来源定位和溯源核验情况。正文使用的政策、数据和案例依据均可通过下方知识专库链接回看原始召回材料，实现可信溯源。"
-    clean = str(text or "").strip()
-    if not clean:
-        return default_summary
-    weak_patterns = ("需核验", "人工核验", "建议核验", "建议核对", "内容仅供参考")
-    if any(pattern in clean for pattern in weak_patterns):
-        return default_summary
-    return clean
-
-
-def render_material_card(item, index):
-    material_type = item.get("type") or item.get("素材类型") or "核心素材"
-    name = item.get("material_name") or item.get("材料名称") or item.get("title") or item.get("文章标题") or f"素材{index}"
-    source = item.get("source") or item.get("来源") or item.get("publisher") or ""
-    date = item.get("date") or item.get("发布日期") or item.get("time") or ""
-    section = item.get("section") or item.get("正文对应") or ""
-    support = item.get("support") or item.get("支撑内容") or ""
-    verify = (
-        item.get("verification")
-        or item.get("核验完成情况")
-        or item.get("verify")
-        or item.get("核验提示")
-        or ""
-    )
-    source_text = "，".join(part for part in [source, date] if part)
-
-    verification_text = normalize_verification_text(verify, item)
-    verify_html = f'<div class="verify"><b>已完成核验：</b>{esc(verification_text)}</div>' if verification_text else ""
-    return f"""
-    <article class="material-card">
-      <div class="card-top">
-        <span class="badge">{esc(material_type)}</span>
-        <span class="index">#{index}</span>
-      </div>
-      <h3>{esc(name)}</h3>
-      <dl>
-        <div><dt>来源</dt><dd>{esc(source_text or "未标注")}</dd></div>
-        <div><dt>正文对应</dt><dd>{esc(section or "未标注")}</dd></div>
-        <div><dt>支撑内容</dt><dd>{esc(support or "未标注")}</dd></div>
-      </dl>
-      {verify_html}
-    </article>
-    """
-
-
-def render_materials(materials):
-    material_items = normalize_list(materials)
-    if not material_items:
-        return '<p class="empty">未提供素材使用情况。</p>'
-
-    groups = {}
-    for item in material_items:
-        group = item.get("type") or item.get("素材类型") or "核心素材"
-        groups.setdefault(group, []).append(item)
-
-    html_parts = []
-    index = 1
-    for group_name, group_items in groups.items():
-        html_parts.append(f'<section class="material-group"><h2>{esc(group_name)}</h2><div class="cards">')
-        for item in group_items:
-            html_parts.append(render_material_card(item, index))
-            index += 1
-        html_parts.append('</div></section>')
-    return "\n".join(html_parts)
-
-
-def render_checks(checks):
-    check_items = normalize_list(checks)
-    if not check_items:
-        return '<p class="empty">本次使用素材均已通过深知可信搜索完成来源定位和溯源核验。</p>'
-    lis = "\n".join(f"<li>{esc(normalize_verification_text(item))}</li>" for item in check_items)
-    return f"<ol>{lis}</ol>"
-
-
-def render_html(data):
-    title = data.get("title") or data.get("标题") or "素材来源说明"
-    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-    summary = normalize_summary_text(data.get("summary"))
-    knowledge_bases = data.get("knowledge_bases") or data.get("knowledgeBases") or data.get("知识专库链接") or []
+def to_trace_payload(data: dict) -> tuple[dict, str, str]:
+    title = first_value(data, "title", "标题") or "可信溯源报告"
+    answer = first_value(data, "document_content", "documentContent", "正文", "body", "answer", "content_markdown")
+    if isinstance(data.get("document_content"), list):
+        answer = "\n\n".join(first_value(item, "text", "content") for item in data["document_content"] if isinstance(item, dict))
     materials = data.get("materials") or data.get("素材使用情况") or []
-    checks = (
-        data.get("verification_checks")
-        or data.get("溯源核验完成情况")
-        or data.get("checks")
-        or data.get("需人工核验信息")
-        or []
-    )
-
-    return f"""<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{esc(title)}</title>
-  <style>
-    :root {{
-      --text: #1f2937;
-      --muted: #64748b;
-      --line: #d8dee8;
-      --bg: #f6f8fb;
-      --panel: #ffffff;
-      --accent: #1d4ed8;
-      --accent-soft: #e8f0ff;
-      --verify: #166534;
-      --verify-bg: #ecfdf3;
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      color: var(--text);
-      background: var(--bg);
-      line-height: 1.65;
-    }}
-    main {{ max-width: 1120px; margin: 0 auto; padding: 40px 28px 64px; }}
-    header {{ margin-bottom: 28px; }}
-    h1 {{ font-size: 30px; line-height: 1.3; margin: 0 0 12px; }}
-    h2 {{ font-size: 20px; margin: 0 0 14px; }}
-    h3 {{ font-size: 17px; margin: 10px 0 12px; }}
-    .meta {{ color: var(--muted); font-size: 14px; }}
-    .panel {{
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 22px;
-      margin: 18px 0;
-      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
-    }}
-    .lead {{ color: #334155; margin: 0; }}
-    .kb-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }}
-    .kb-link {{
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      min-height: 56px;
-      padding: 14px 16px;
-      border-radius: 8px;
-      border: 1px solid #bfd0ff;
-      background: var(--accent-soft);
-      color: var(--accent);
-      text-decoration: none;
-      font-weight: 650;
-    }}
-    .kb-link small {{ color: #315fb8; white-space: nowrap; font-weight: 500; }}
-    .material-group {{ margin-top: 22px; }}
-    .cards {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }}
-    .material-card {{
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 18px;
-    }}
-    .card-top {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; }}
-    .badge {{
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 999px;
-      background: #eef2f7;
-      color: #334155;
-      font-size: 13px;
-    }}
-    .index {{ color: var(--muted); font-size: 13px; }}
-    dl {{ margin: 0; }}
-    dl div {{ border-top: 1px solid #eef2f7; padding: 10px 0; }}
-    dt {{ color: var(--muted); font-size: 13px; margin-bottom: 2px; }}
-    dd {{ margin: 0; }}
-    .verify {{
-      margin-top: 10px;
-      padding: 10px 12px;
-      border-radius: 8px;
-      color: var(--verify);
-      background: var(--verify-bg);
-    }}
-    ol {{ margin: 0; padding-left: 24px; }}
-    .empty {{ color: var(--muted); margin: 0; }}
-    footer {{ color: var(--muted); margin-top: 30px; font-size: 13px; }}
-  </style>
-</head>
-<body>
-<main>
-  <header>
-    <h1>{esc(title)}</h1>
-    <div class="meta">生成时间：{esc(generated_at)} ｜ 可信溯源文件，不是正式正文附件</div>
-  </header>
-
-  <section class="panel">
-    <h2>可信溯源说明</h2>
-    <p class="lead">{esc(summary)}</p>
-  </section>
-
-  <section class="panel">
-    <h2>知识专库链接</h2>
-    {render_kb_links(knowledge_bases)}
-  </section>
-
-  <section>
-    <h2>素材使用情况</h2>
-    {render_materials(materials)}
-  </section>
-
-  <section class="panel">
-    <h2>溯源核验完成情况</h2>
-    {render_checks(checks)}
-  </section>
-
-  <footer>【AI生成提示】内容由AI生成，内容仅供参考。</footer>
-</main>
-</body>
-</html>
-"""
+    articles = []
+    source_index = load_source_index()
+    for index, item in enumerate(materials, 1):
+        if not isinstance(item, dict):
+            continue
+        material_name = first_value(item, "material_name", "材料名称", "title", "文章标题") or f"来源材料{index}"
+        # 新结果必须直接携带 source_url；标题匹配仅兼容历史 JSON。
+        matched = source_index.get(material_name) or source_index.get(normalize_title(material_name), {})
+        source_url = first_value(item, "source_url", "sourceUrl", "源网址", "原文链接", "url") or matched.get("source_url", "")
+        policy_url = first_value(item, "policyUrl", "policy_url", "knowledgeBase", "知识专库链接") or matched.get("policy_url", "")
+        articles.append({
+            "文章标题": material_name,
+            "来源": first_value(item, "source", "来源", "publisher"),
+            "发布日期": first_value(item, "date", "发布日期", "time"),
+            "相关段落": first_value(item, "excerpt", "摘录", "支撑内容", "support"),
+            "正文对应": first_value(item, "section", "正文对应"),
+            "源网址": source_url,
+            "知识专库原文": policy_url,
+            "policyUrl": first_value(item, "policyUrl", "policy_url"),
+            "类型": first_value(item, "type", "素材类型") or "材料",
+        })
+    knowledge_bases = data.get("knowledge_bases") or data.get("knowledgeBases") or data.get("知识专库链接") or []
+    kb_urls = []
+    kb_labels = []
+    for item in knowledge_bases if isinstance(knowledge_bases, list) else [knowledge_bases]:
+        if isinstance(item, dict):
+            url = first_value(item, "url", "knowledgeBase", "知识专库链接")
+            label = first_value(item, "label", "purpose", "搜索目的", "query") or "相关搜索来源"
+        else:
+            url = str(item)
+            label = "相关搜索来源"
+        if url and url not in kb_urls:
+            kb_urls.append(url)
+            kb_labels.append(label)
+    content = {"data": {"检索文章": articles}}
+    payload = {"answer": answer, "question": title, "content": content}
+    if kb_urls:
+        payload["knowledgeBase"] = kb_urls[0]
+        payload["knowledgeBases"] = kb_urls
+        payload["knowledgeBaseLabels"] = kb_labels
+        # 可信搜索渲染器会优先展开 content，必须在该层保留这些字段。
+        content["knowledgeBase"] = kb_urls[0]
+        content["knowledgeBases"] = kb_urls
+        content["knowledgeBaseLabels"] = kb_labels
+    return payload, title, answer
 
 
-def main():
-    parser = argparse.ArgumentParser(description="生成素材来源说明 HTML")
-    parser.add_argument("input", help="结构化素材来源 JSON，必须位于 official-docs/input、output 或 search-results")
-    parser.add_argument("--output", "-o", help="输出 HTML 文件名，默认根据标题生成并保存到 official-docs/output")
+def main() -> None:
+    parser = argparse.ArgumentParser(description="生成深知可信搜索同款可信溯源报告 HTML")
+    parser.add_argument("input", help="结构化可信溯源 JSON，必须位于 official-docs/input")
+    parser.add_argument("--output", "-o", help="输出 HTML 文件名，默认写入 official-docs/output")
     args = parser.parse_args()
-
-    input_path = resolve_input_json(args.input)
-    with input_path.open("r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    title = data.get("title") or data.get("标题") or input_path.stem
-    output_path = resolve_output_html(args.output, title)
-    output_path.write_text(render_html(data), encoding="utf-8")
-    print(f"✓ 素材来源说明 HTML 已生成: {output_path.relative_to(SKILL_ROOT)}")
+    input_path = resolve_input(args.input)
+    data = json.loads(input_path.read_text(encoding="utf-8"))
+    payload, title, answer = to_trace_payload(data)
+    output_path = safe_output(args.output, title)
+    renderer = load_renderer()
+    rendered = renderer.render_html(payload, title, answer_override=answer, question_override=title)
+    output_path.write_text(rendered, encoding="utf-8")
+    print(f"可信溯源报告 HTML 已生成: {output_path}")
 
 
 if __name__ == "__main__":
