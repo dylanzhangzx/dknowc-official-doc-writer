@@ -8,13 +8,13 @@ https://github.com/dylanzhangzx/dknowc-official-doc-writer
 
 深知公文写作是面向单位办公室、综合岗、文秘、材料岗和企事业单位用户的正式材料写作 Agent Skill，支持公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结、方案报告生成、深知可信搜索、可信溯源报告和 Word 交付。
 
-本 GitHub Public 版采用 skills.sh 渠道配置，不内置深知搜索 API Key。API Key 统一通过环境变量 `DKNOWC_API_KEY` 注入；首次使用时，由 Agent 引导用户通过手机号验证码完成 MaaS 注册，并将 API Key 写入本机 `~/.zshrc` 中的 `DKNOWC_API_KEY` 配置块。
+本 GitHub Public 版采用 skills.sh 渠道配置，不内置深知搜索 API Key。API Key 按需前置：不涉及深知搜索的任务（简单通知、改写、润色、审查、基于用户材料写作、只生成 Word 或红头文件）无需配置 Key 即可使用；仅当任务需要搜索政策、数据、案例依据时，才由 Agent 引导用户通过手机号验证码完成 MaaS 注册，并将 API Key 写入本机 `~/.zshrc` 中的 `DKNOWC_API_KEY` 配置块。
 
 ## GitHub Release 文案
 
 Title:
 
-v3.3.0 - GitHub public release
+v3.3.1 - GitHub public release
 
 Body:
 
@@ -23,8 +23,8 @@ This is the skills.sh GitHub public release of 深知公文写作, an Agent Skil
 Highlights:
 
 - Uses the skills.sh channel configuration.
-- API Key is injected through the `DKNOWC_API_KEY` environment variable; MaaS registration writes the key into `~/.zshrc`.
-- Blocks writing and Word generation until a valid API Key is configured.
+- API Key is on-demand: tasks without 深知可信搜索 no longer require configuring a Key; only search-dependent tasks guide MaaS registration, writing the key into `~/.zshrc` as `DKNOWC_API_KEY`.
+- Adds an API Key value explanation when search needs a key, covering 6M public normative documents and 70M traceable official materials updated daily.
 - Adds existing-Word structure reading and format review via `scripts/review_document.py`.
 - Upgrades source notes to a trusted traceability report HTML with clickable source markers, source cards, and knowledge-base links.
 - Calls 深知可信搜索 for policy, data, case, and reference materials.

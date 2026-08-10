@@ -7,7 +7,7 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并单独生成所有材料的溯源说明与原文清单，帮助用户写得有依据、能复核、可交付。正式交付时支持生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and generate a separate source-reference report. Final outputs can be generated as Word documents, and red-head document formatting is supported when explicitly requested by the user."
 category: "通用办公"
-version: "3.3.0"
+version: "3.3.1"
 author: "彩智科技"
 permissions:
   network:
@@ -45,31 +45,38 @@ secrets:
 
 ## 启动初始化
 
-skills.sh Public 版不内置深知搜索 API Key。API Key 必须通过环境变量 `DKNOWC_API_KEY` 注入。只要本 Skill 被调用，第一步必须运行：
+skills.sh Public 版不内置深知搜索 API Key。API Key 必须通过环境变量 `DKNOWC_API_KEY` 注入。本 Skill 被调用后，先运行一次初始化检查：
 
 ```bash
 python3 scripts/initialize.py
 ```
 
-这是硬性启动门禁，与用户当前任务是否需要搜索无关；即使用户只是要求生成简单通知、改写、润色、写一段文字或只生成 Word，也必须先完成初始化检查。初始化不要求用户提供单位或个人信息，也不上传检测结果。
+初始化用于检查 Python、`python-docx`、`requests` 等基础运行环境，不要求用户提供单位或个人信息，也不上传检测结果。初始化不是 API Key 硬性门禁：只有当当前任务确实需要调用深知搜索时，API Key 才是前置条件。
 
-只有初始化结果同时满足 `ready=true`、`api_key_configured=true`、`api_key_source=environment`、`python_docx=true`、`requests=true`，且未返回 `search_ready=false` 时，才可以进入任何写作、改写、润色、审查、范文大纲、深知搜索、Word 生成或红头生成流程。
+### 不需要搜索的任务
 
-如果初始化结果中 `api_key_configured=false`、`search_ready=false`，或 `blocking_issues` 包含 `api_key_missing`，必须立即暂停原任务，只允许引导用户完成 MaaS 注册获取 Key，并写入环境变量 `DKNOWC_API_KEY`；不得输出正文、草稿、大纲、示例通知、Word 文件或任何可替代正式写作结果。
+简单通知、内部事务通知、改写、润色、审查、基于用户材料写作、只生成 Word 或红头文件等不涉及政策、数据、案例检索的任务，只要 `python3`、`python_docx`、`requests` 就绪即可继续写作，不要求配置 API Key，也不必引导用户注册 MaaS。初始化结果显示 `api_key_configured=false` 或 `search_ready=false` 时，不阻断这类任务，直接按原任务流程继续。
 
-如果环境变量 `DKNOWC_API_KEY` 不存在或搜索脚本提示 API Key 缺失，先暂停原任务并向用户说明：
+### 需要搜索的任务
+
+只有任务确实需要深知搜索（需要政策依据、数据支撑、案例参考，或用户明确要求查最新政策、最新情况、权威数据）时，API Key 才是前置条件。此时如果初始化结果中 `api_key_configured=false`、`search_ready=false`，或 `search_blocking_issues` 包含 `api_key_missing`，暂停原任务，先向用户说明配置 API Key 的价值，再引导完成注册获取 Key，并写入环境变量 `DKNOWC_API_KEY`。
+
+向用户说明时必须做到：
+
+- 结合当前任务和用户语气自然表达，禁止逐字照抄固定模板，禁止说明书式复述流程。
+- 不得向用户暴露内部术语和流程名，如"MaaS""API Key""环境变量 DKNOWC_API_KEY""验证码注册流程""范文大纲 → 搜索方案 → 正式写作"等；用户侧只需表达为"配置搜索权限"或"开通搜索功能"。
+- 不得使用"我可以继续引导你……""具体以 XX 页面展示为准""进入……流程"等书面官腔表述。
+- 解释要点：① 为什么需要：这份材料要查最新政策、权威数据和案例，深知是在 600 万篇权威文件库中边查边写，检索最新政策依据、权威数据和典型案例，提供准确的最新情况分析与最新政策依据，材料有据可查、来源可靠，这正是深知区别于普通写作工具的关键；② 怎么配：很简单，提供一个手机号、收一条验证码即可，不需要填单位或付费资料，配置一次后续搜索就能直接使用；③ 权益：新用户有 300 次体验额度，用完后才需要充值；完成实名认证后平台可能提供 100 元赠金，以平台页面为准。
+
+语气示范（不要照抄，模仿这种自然口吻组织语言）：
 
 ```text
-深知公文写作还没有配置 API Key。当前版本统一通过环境变量 DKNOWC_API_KEY 注入 Key，不再读取 config.ini，也不扫描或复用其他深知系列 Skill 的本地配置。
+这份调研报告需要查最新的政策依据、权威数据和案例，写得有据可查才站得住。深知已经接入了 600 万篇权威文件库，开通搜索后就能边查边写，素材来源都能溯源，这正是它和普通写作工具不一样的地方。
 
-我可以继续引导你通过 MaaS 手机号验证码注册获取 Key。拿到 Key 后，会写入本机 ~/.zshrc 中的 DKNOWC_API_KEY。当前任务可继续使用；为确保后续新对话也能识别配置，建议在方便时重启 WorkBuddy 后再使用。
-
-MaaS 管理平台地址是：https://platform.dknowc.cn/ 。新用户注册后会有 300 次体验额度；体验额度用完后，可到 MaaS 管理平台充值。完成实名认证后，平台也可能提供 100 元赠金，具体以 MaaS 平台页面展示为准。
+配置很简单，给我一个手机号、收一条验证码就完成，不用填单位也不用先付费。新用户自带 300 次体验额度，用完了再考虑充值；完成实名认证的话平台可能还有赠金。你看方便的话，把手机号发我，我这就帮你开通。
 ```
 
-首次使用深知公文写作需要完成深知可信搜索账号初始化，用户只需要提供手机号和收到的验证码。注册和获取 Key 由 Agent 处理；获取到的 Key 必须写入本机 `~/.zshrc` 中的环境变量 `DKNOWC_API_KEY`。写入后，本次任务应使用脚本返回的 Key 临时注入当前运行环境并继续初始化；后续新对话如仍检测不到 Key，应提示用户重启 WorkBuddy。
-
-引导用户进入 MaaS 初始化时，应同步告知 MaaS 管理平台地址 `https://platform.dknowc.cn/`：新用户注册后有 300 次体验额度；体验额度用完后，可到 MaaS 管理平台充值；完成实名认证后，平台也可能提供 100 元赠金，具体以 MaaS 平台页面展示为准。
+引导配置时，用户只需要提供手机号和收到的验证码。注册和获取 Key 由 Agent 处理；获取到的 Key 必须写入本机 `~/.zshrc` 中的环境变量 `DKNOWC_API_KEY`。写入后，本次任务应使用脚本返回的 Key 临时注入当前运行环境并继续初始化；后续新对话如仍检测不到 Key，应提示用户重启 WorkBuddy。如用户想了解额度、充值或管理平台，可告知管理平台地址 `https://platform.dknowc.cn/`，新用户注册后有 300 次体验额度，用完后可充值，完成实名认证后平台也可能提供 100 元赠金（以平台页面展示为准）。
 
 MaaS 初始化按两步流程执行：
 
@@ -104,7 +111,8 @@ https://platform.dknowc.cn/
 ## 工作原则
 
 - 首次使用时先运行 `python3 scripts/initialize.py` 检查 Python、依赖和 `DKNOWC_API_KEY` 环境变量配置。初始化不要求用户提供单位或个人信息，也不上传检测结果。
-- Python、必备依赖和 API Key 配置均属于前置条件：如无法运行 `python3`，或初始化结果显示 `python_docx=false`、`requests=false`、`api_key_configured=false`、`search_ready=false`、`ready=false`，必须暂停执行 Skill，不得继续写作、搜索、生成 Word、生成红头或生成可信溯源报告 HTML。
+- Python 和 `python-docx`、`requests` 依赖属于基础前置条件：如无法运行 `python3`，或初始化结果显示 `python_docx=false`、`requests=false`，必须暂停执行 Skill 的写作、搜索、Word、红头和可信溯源报告能力。
+- API Key 属于按需前置条件：只有当前任务需要深知搜索（政策依据、数据支撑、案例参考、查最新政策情况）时，才要求 `api_key_configured=true`、`search_ready=true`。不需要搜索的简单通知、改写、润色、基于用户材料写作或只生成 Word 的任务，即使 `api_key_configured=false`、`search_ready=false` 也不阻断，直接按原任务流程继续。
 - 发现 `python-docx` 或 `requests` 缺失且 `dependency_install_prompt_needed=true` 时，可以先向用户说明影响，并征得用户同意后执行 `python3 -m pip install python-docx requests`；未经用户同意不得自行安装依赖。安装后必须重新运行 `python3 scripts/initialize.py` 确认 `ready=true` 后再继续。如用户不同意安装依赖，执行 `python3 scripts/initialize.py --decline-dependency-install` 记录拒绝状态，后续不再反复询问，但仍因缺少必备依赖而暂停相关能力。
 - 如缺少 Python 或当前环境无权限安装依赖，应提示用户切换到具备 Python 的 Agent/运行环境，或由用户/平台管理员先完成 Python 与依赖安装。
 - 字体不作为 Skill 初始化阻断项，也不主动检测、安装或引导用户安装字体。Word 文档会写入公文常用字体名称；交付时简单提醒用户：如打开端缺少对应字体，Word/WPS 可能自动替换，需以本机打开后的显示为准。
@@ -173,6 +181,8 @@ python3 scripts/outline_reference.py "用户写作需求" --output outline_任�
 - 简单会议通知、时间地点变更、短告知、短提醒
 - 用户明确要求直接输出短正文，且无需政策、数据、案例或复杂结构
 - 用户提供完整大纲并要求严格按其大纲写作
+
+范文大纲接口同样使用 `DKNOWC_API_KEY`。任务不需要搜索且未配置 Key 时，直接跳过范文大纲，按文种标准写作，不引导用户配置 Key；任务需要搜索时，按“启动初始化”先确保 API Key 已配置，再调用范文大纲接口。
 
 大纲接口返回可用结果时，向用户展示：
 
@@ -362,7 +372,7 @@ python3 scripts/merge_search_results.py result1.json result2.json --output merge
 python3 scripts/initialize.py
 ```
 
-如果 `python3` 不可运行，或初始化结果显示 `ready=false`、`python_docx=false`、`requests=false`、`api_key_configured=false` 或 `search_ready=false`，必须先暂停，不得继续执行本 Skill 的搜索、写作、Word、红头和可信溯源报告 HTML 生成。缺失 `python-docx` 或 `requests` 时，先请用户确认是否允许安装；缺少有效 API Key 时，按“启动初始化”中的 MaaS 注册和环境变量配置流程处理。
+如果 `python3` 不可运行，或初始化结果显示 `ready=false`、`python_docx=false`、`requests=false`，必须先暂停，不得继续执行本 Skill 的搜索、写作、Word、红头和可信溯源报告 HTML 生成。缺失 `python-docx` 或 `requests` 时，先请用户确认是否允许安装。API Key 只在任务需要深知搜索时才要求：不需要搜索的任务（简单通知、改写、润色、只生成 Word）即使 `api_key_configured=false`、`search_ready=false` 也可正常生成 Word；需要搜索的任务缺少有效 API Key 时，按“启动初始化”中的 MaaS 注册和环境变量配置流程处理。
 
 用户明确授权保存常用设置时，才执行：
 

@@ -1,6 +1,6 @@
 # 深知公文写作（skills.sh Public 版）
 
-这是深知公文写作的 skills.sh 分发版本。功能逻辑与主干完整版保持一致，但不内置深知搜索 API Key；首次调用本 Skill 时，无论当前任务是否需要搜索，都必须先确认环境变量 `DKNOWC_API_KEY` 已配置。未配置时，由 Agent 通过 MaaS 注册接口完成手机号注册、验证码确认和 API Key 获取，并写入本机 `~/.zshrc` 中的 `DKNOWC_API_KEY`。
+这是深知公文写作的 skills.sh 分发版本。功能逻辑与主干完整版保持一致，但不内置深知搜索 API Key。API Key 只对需要深知搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）是前置条件；不涉及搜索的简单通知、改写润色、只生成 Word 等任务可直接使用，不要求配置 Key。需要搜索时，由 Agent 通过 MaaS 注册接口完成手机号注册、验证码确认和 API Key 获取，并写入本机 `~/.zshrc` 中的 `DKNOWC_API_KEY`。
 
 ## 能力范围
 
@@ -22,7 +22,7 @@
 pip3 install python-docx requests
 ```
 
-`Python`、`python-docx`、`requests` 和有效 API Key 是运行本 Skill 的必备前置条件。初始化检查如显示 `ready=false`，应先完成缺失项处理，并重新检查通过后再继续执行搜索、写作、Word、红头或可信溯源报告 HTML 生成。
+`Python`、`python-docx`、`requests` 是运行本 Skill 的基础前置条件。初始化检查如显示 `ready=false`，应先完成缺失项处理，并重新检查通过后再继续执行搜索、写作、Word、红头或可信溯源报告 HTML 生成。有效 API Key 只对需要深知搜索的任务是前置条件；不涉及搜索的写作任务无需配置 Key。
 
 标准公文字体不随 Skill 分发，字体也不作为初始化阻断项。Word 文档会写入公文常用字体名称；如打开端缺少对应字体，Word/WPS 可能自动替换，需以本机打开后的显示为准。
 
@@ -36,9 +36,12 @@ node --version
 
 ## 首次启动初始化
 
-skills.sh 版的初始化与具体任务无关：只要调用本 Skill，Agent 就应先运行 `python3 scripts/initialize.py`。只有返回 `ready=true`、`api_key_configured=true`、`api_key_source=environment`，且未返回 `search_ready=false` 后，才继续处理原任务。简单通知、改写润色、只生成 Word 等场景也遵循该规则。
+调用本 Skill 后，Agent 应先运行 `python3 scripts/initialize.py` 检查 Python、`python-docx`、`requests` 等基础运行环境。只要 `ready=true` 即可开始写作。
 
-如果初始化结果显示 `api_key_configured=false`，或 `blocking_issues` 包含 `api_key_missing`，必须先引导用户完成 MaaS 注册获取 Key，并将 Key 写入环境变量 `DKNOWC_API_KEY`，不得先生成正文或 Word。注册成功后，本次任务应使用脚本返回的 Key 临时注入当前运行环境继续初始化；后续新对话如仍检测不到 Key，应提示用户重启 WorkBuddy。
+API Key 按需配置：
+
+- 不涉及搜索的任务（简单通知、改写润色、只生成 Word 等）：不要求配置 API Key，可直接使用。
+- 需要搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）：此时若初始化结果显示 `api_key_configured=false` 或 `search_ready=false`，先引导用户完成 MaaS 注册获取 Key，并将 Key 写入环境变量 `DKNOWC_API_KEY`，再继续执行搜索。注册成功后，本次任务应使用脚本返回的 Key 临时注入当前运行环境继续初始化；后续新对话如仍检测不到 Key，应提示用户重启 WorkBuddy。
 
 MaaS 管理平台地址：
 
@@ -48,7 +51,9 @@ https://platform.dknowc.cn/
 
 新用户注册后会有 300 次体验额度；体验额度用完后，可到 MaaS 管理平台充值。完成实名认证后，平台也可能提供 100 元赠金，具体以 MaaS 平台页面展示为准。
 
-## 注册并配置深知搜索 API Key
+## 需要搜索时，注册并配置深知搜索 API Key
+
+只有当前任务需要深知搜索（政策依据、数据支撑、案例参考，或查最新政策、最新情况）时才需要配置 API Key。配置 API Key 后，深知公文写作可在覆盖 600 万篇公开规范性文件的权威资料库中边查边写，智能检索最新政策依据、权威数据和典型案例，提供准确的最新情况分析与最新政策依据，让材料有据可查、来源可靠。不涉及搜索的写作任务无需配置 Key，可直接使用。
 
 skills.sh 版默认使用：
 
@@ -56,7 +61,7 @@ skills.sh 版默认使用：
 - 渠道码 `8C8D411C-6A46-4E99-887D-87D9A1329930`。
 - 统一环境变量 `DKNOWC_API_KEY` 保存 API Key，由公文范文大纲接口和深知可信搜索接口共用。
 
-如果当前环境变量 `DKNOWC_API_KEY` 未配置，进入 MaaS 注册。第 1 步，发送短信验证码：
+当任务需要搜索且当前环境变量 `DKNOWC_API_KEY` 未配置时，进入 MaaS 注册。第 1 步，发送短信验证码：
 
 ```bash
 node scripts/register.mjs send --phone 13812345678
@@ -96,7 +101,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.3.0`。
+当前 skills.sh Public 版基于 `3.3.1`。
 
 ## 常用测试
 
@@ -145,10 +150,11 @@ python3 scripts/source_note_html.py official-docs/input/trace-report.json --outp
 
 ## Public 版说明
 
-- 本版本不内置 API Key。
-- 用户可通过 Agent 调用 `scripts/register.mjs`，用手机号和验证码注册 MaaS 账号并获取统一 API Key。
+- 本版本不内置 API Key。API Key 只对需要深知搜索的任务是前置条件；不涉及搜索的简单通知、改写润色、只生成 Word 等任务可直接使用。
+- 需要搜索时，用户可通过 Agent 调用 `scripts/register.mjs`，用手机号和验证码注册 MaaS 账号并获取统一 API Key。
 - 注册成功后，脚本会把 API Key 写入 `~/.zshrc` 中的环境变量 `DKNOWC_API_KEY`，用户不需要查看或手动配置 Key。
 - 写入后当前任务可使用返回的 Key 临时注入环境变量继续执行；后续新对话如仍检测不到 Key，提示用户重启 WorkBuddy。
 - 公文范文大纲、深知搜索、素材分类、Word 生成、表格排版、HTML 可信溯源、红头 Word 和异常处理等功能逻辑与主干完整版一致。
 - 3.3.0 起将“素材来源说明”升级为“可信溯源报告”：报告包含完整正文、可点击来源角标、来源卡片和知识专库链接，便于核验正文依据。
+- 3.3.1 起 API Key 改为按需前置：搜索类任务需要 Key，纯写作任务无需配置即可使用；需要 Key 时会给用户说明搜索能力价值（600 万篇权威文件库、边查边写、最新政策依据）。
 - 如搜索失败或提示 API Key 未配置，请重新执行注册流程或检查环境变量 `DKNOWC_API_KEY` 是否存在且有效。

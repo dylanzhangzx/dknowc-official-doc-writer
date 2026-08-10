@@ -48,12 +48,15 @@ def check_environment():
         blocking_issues.append("python_docx_missing")
     if not requests_available:
         blocking_issues.append("requests_missing")
-    if not config_status["api_key_configured"]:
-        blocking_issues.append("api_key_missing")
     dependency_issues = [
         issue for issue in blocking_issues
         if issue in {"python3_missing", "python_docx_missing", "requests_missing"}
     ]
+    # API Key 只在任务需要深知搜索时才是前置条件，不作为基础写作的阻断项。
+    # 不涉及搜索的简单通知、改写润色、只生成 Word 等任务可直接使用。
+    search_blocking_issues = []
+    if not config_status["api_key_configured"]:
+        search_blocking_issues.append("api_key_missing")
     return {
         "python": platform.python_version(),
         "python3_available": python3_available,
@@ -65,10 +68,12 @@ def check_environment():
         "api_key_hint": config_status["api_key_hint"],
         "config_issue": None if config_status["api_key_configured"] else "api_key_missing",
         "search_ready": config_status["api_key_configured"] and requests_available,
-        "search_note": None if config_status["api_key_configured"] else f"环境变量 {API_KEY_ENV} 中未配置有效 API Key；必须先配置后再运行本 Skill。",
+        "search_blocking_issues": search_blocking_issues,
+        "search_note": None if config_status["api_key_configured"] else f"环境变量 {API_KEY_ENV} 中未配置有效 API Key；仅当任务需要深知搜索（查政策依据、数据支撑、案例参考）时才需要配置，不涉及搜索的写作任务可直接使用。",
         "font_note": "Word 文档会写入公文常用字体名称；打开端如缺少对应字体，Word/WPS 可能自动替换，需以本机打开后的显示为准。",
         "blocking_issues": blocking_issues,
         "ready": not blocking_issues,
+        "search_ready_note": None if config_status["api_key_configured"] else "仅需要搜索的任务需先完成 MaaS 注册获取 API Key 并写入环境变量；无需搜索的任务可先直接写作。",
         "dependency_install_prompt_needed": bool(dependency_issues) and not state.get("dependency_install_declined"),
         "install_hint": "经用户同意后，可执行 python3 -m pip install python-docx requests" if dependency_issues else None,
         "maas_platform_url": "https://platform.dknowc.cn/",
