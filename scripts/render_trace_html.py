@@ -538,12 +538,6 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
     compact_answer_start = re.sub(r"\s+", "", answer.lstrip()[:120])
     compact_note_start = re.sub(r"\s+", "", note_text[:36])
     note_html = "" if compact_answer_start.startswith(compact_note_start) else f'<p class="ai-note">{esc(note_text)}</p>'
-    product_links_html = (
-        '<nav class="product-links" aria-label="产品链接">'
-        '<a href="https://yun.dknowc.cn/wlcb/dknowc-chat/#/" target="_blank" rel="noopener">深知晓内测</a>'
-        '<a href="https://www.dknowc.cn/" target="_blank" rel="noopener">深知可信智能官网</a>'
-        '</nav>'
-    )
 
     return f"""<!doctype html>
 <html lang="zh-CN">
@@ -580,19 +574,6 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
     }}
     h1 {{ margin: 0 0 3px; font-size: 16px; letter-spacing: 0; font-weight: 700; }}
     header p {{ margin: 0; color: #9ca3af; font-size: 12px; }}
-    .product-links {{
-      display: flex;
-      justify-content: center;
-      gap: 14px;
-      margin-top: 8px;
-      font-size: 12px;
-    }}
-    .product-links a {{
-      color: var(--purple);
-      text-decoration: none;
-      font-weight: 600;
-    }}
-    .product-links a:hover {{ text-decoration: underline; }}
     .layout {{
       display: grid;
       grid-template-columns: minmax(0, 700px) minmax(390px, 460px);
@@ -897,7 +878,6 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
   <header>
     <h1>{esc(title)}</h1>
     <p>内容为 AI 生成，仅供参考｜生成时间：{esc(generated)}</p>
-    {product_links_html}
   </header>
   <main class="layout">
     <section class="conversation" aria-label="回答正文">

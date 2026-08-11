@@ -14,7 +14,7 @@ https://github.com/dylanzhangzx/dknowc-official-doc-writer
 
 Title:
 
-v3.3.1 - GitHub public release
+v3.4.0 - GitHub public release
 
 Body:
 
@@ -23,12 +23,14 @@ This is the skills.sh GitHub public release of 深知公文写作, an Agent Skil
 Highlights:
 
 - Uses the skills.sh channel configuration.
+- All formal writing tasks now default to Word delivery; chat output only when the user explicitly asks for it.
+- Adds fact-discipline rules (`reference/fact_discipline.md`) to keep facts at their given strength and avoid inventing unstated content.
+- Adds anti-AI-pattern checks (`reference/anti_ai_patterns.md`) and a prose lint script (`scripts/prose_lint.py`).
+- Expands standard files to 33 (English-named), covering statutory documents (decision, resolution, order, gazette, motion) and work materials (plan, summary, research report, etc.).
+- Rebuilds `SKILL.md` with progressive loading and a reference-material table.
 - API Key is on-demand: tasks without 深知可信搜索 no longer require configuring a Key; only search-dependent tasks guide MaaS registration, writing the key into `~/.zshrc` as `DKNOWC_API_KEY`.
-- Adds an API Key value explanation when search needs a key, covering 6M public normative documents and 70M traceable official materials updated daily.
 - Adds existing-Word structure reading and format review via `scripts/review_document.py`.
 - Upgrades source notes to a trusted traceability report HTML with clickable source markers, source cards, and knowledge-base links.
-- Calls 深知可信搜索 for policy, data, case, and reference materials.
-- Supports outline reference, search plan confirmation, material classification, review checklist, Word generation, and red-head document generation.
 - Does not include any real API Key or local `config.ini`.
 
 Users can manage MaaS usage at https://platform.dknowc.cn/.
