@@ -41,6 +41,8 @@ def check_environment():
     python_docx_available = _module_available("docx")
     requests_available = _module_available("requests")
     config_status = check_api_key_config()
+    kb_count = _count_kb_materials()
+    pref_count = _count_writing_preferences()
     blocking_issues = []
     if not python3_available:
         blocking_issues.append("python3_missing")
@@ -74,6 +76,13 @@ def check_environment():
         "blocking_issues": blocking_issues,
         "ready": not blocking_issues,
         "search_ready_note": None if config_status["api_key_configured"] else "仅需要搜索的任务需先完成 MaaS 注册获取 API Key 并写入环境变量；无需搜索的任务可先直接写作。",
+        "local_memory": {
+            "knowledge_base_materials": kb_count,
+            "knowledge_base_dir": "knowledge-base/",
+            "writing_preferences_count": pref_count,
+            "preferences_path": "config/writing_preferences.json",
+            "note": "个人素材库与写作偏好仅保存在本机，不随公开包分发；大于 0 时写作任务应先检索素材库并应用偏好。",
+        },
         "dependency_install_prompt_needed": bool(dependency_issues) and not state.get("dependency_install_declined"),
         "install_hint": "经用户同意后，可执行 python3 -m pip install python-docx requests" if dependency_issues else None,
         "maas_platform_url": "https://platform.dknowc.cn/",
@@ -81,6 +90,28 @@ def check_environment():
             "dependency_install_declined": bool(state.get("dependency_install_declined")),
         },
     }
+
+
+def _count_kb_materials():
+    index_path = SKILL_ROOT / "knowledge-base" / "_index.json"
+    try:
+        data = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        return len(data["items"])
+    return 0
+
+
+def _count_writing_preferences():
+    pref_path = SKILL_ROOT / "config" / "writing_preferences.json"
+    try:
+        data = json.loads(pref_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    return sum(len(v) for v in data.values() if isinstance(v, list))
 
 
 def _module_available(module_name):

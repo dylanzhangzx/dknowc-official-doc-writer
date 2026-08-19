@@ -7,18 +7,19 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并单独生成所有材料的溯源说明与原文清单，帮助用户写得有依据、能复核、可交付。正式交付时支持生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and generate a separate source-reference report. Final outputs can be generated as Word documents, and red-head document formatting is supported when explicitly requested by the user."
 category: "通用办公"
-version: "3.4.0"
+version: "3.4.2"
 author: "彩智科技"
 permissions:
   network:
     - "https://open.dknowc.cn/"
     - "https://platform.dknowc.cn/"
   local_read:
-    - "本 Skill 的 reference、config、official-docs 等规则、标准、配置和参考资料文件"
+    - "本 Skill 的 reference、config、official-docs、knowledge-base 等规则、标准、配置、参考资料和个人素材库文件"
   local_write:
     - "本地初始化状态文件"
     - "本机 ~/.zshrc 中的 DKNOWC_API_KEY 配置块"
     - "用户明确授权保存的写作偏好"
+    - "用户明确授权保存的个人素材库文件（knowledge-base/ 目录）"
     - "生成的 Word 文档"
     - "可信溯源报告与搜索结果中间文件"
 secrets:
@@ -118,6 +119,7 @@ https://platform.dknowc.cn/
 | `reference/fact_discipline.md` | 起草/改稿前 | 所有正式写作任务，约束事实边界 |
 | `reference/anti_ai_patterns.md` | 定稿前/审查 | 正式正文语言复核、去 AI 味、审查模式 |
 | `scripts/prose_lint.py` | 定稿前 | 检查草稿语言、格式、重复风险（可选） |
+| `scripts/local_memory.py` | 写作前/写作后 | 素材库或偏好数量大于 0 时检索素材、应用偏好；用户确认保存时写入 |
 | `reference/search_policy.md` | 搜索前 | 需要政策/数据/案例检索时 |
 | `reference/search_guide.md` | 执行搜索后 | 生成可信溯源报告 HTML 时 |
 | `reference/material_usage_guidance.md` | 执行搜索后 | 召回素材如何进入正文 |
@@ -125,6 +127,60 @@ https://platform.dknowc.cn/
 | `reference/review_checklist.md` | 生成前后 | 按任务风险执行审查时 |
 | `reference/search_intro.md` | 引导用户时 | 需要向用户说明搜索功能时 |
 | `reference/standards/*.md` | 按文种 | 命中对应文种时读取（见"写作规则"） |
+
+## 个人素材库与写作偏好
+
+本 Skill 在本机维护两类个人状态，均只对当前用户生效、不随公开包分发、不上传：个人素材库 `knowledge-base/` 和写作偏好 `config/writing_preferences.json`。初始化结果的 `local_memory` 字段返回二者数量；数量大于 0 时，写作任务应先检索素材库并应用偏好。
+
+### 个人素材库（knowledge-base/）
+
+用户提供的材料（单位资料、政策文件、数据资料、历史文稿、业务口径等）默认只在当轮使用、不留存。以下情况才存入素材库：
+
+- 用户明确说"存下来""记住这份材料""加到素材库"等 → 直接保存。
+- Agent 判断材料有长期复用价值（单位基本信息、常用政策依据、历史成稿、内部业务口径），主动建议保存并说明用途 → 用户确认后保存。
+
+未经用户确认，不得擅自把材料写入素材库；一次性使用的内容（单次任务草稿、临时改稿素材）不保存。
+
+保存与检索命令：
+
+```bash
+python3 scripts/local_memory.py kb save <文件> --category <分类> --tags <场景标签> --note <备注> [--title <标题>]
+python3 scripts/local_memory.py kb list [--category <分类>] [--tag <标签>]
+python3 scripts/local_memory.py kb search <关键词> [--category <分类>]
+python3 scripts/local_memory.py kb remove <素材ID>    # 必须先经用户确认
+```
+
+分类固定六类：`unit-profile`（单位资料）、`policy`（政策文件）、`data`（数据资料）、`past-docs`（历史文稿）、`business-rules`（业务口径）、`misc`（其他）；场景标签按写作场景打（如：通知、请示、总结、汇报材料）。
+
+素材使用规则：
+
+- 正式写作需要材料支撑时，先检索素材库，命中后读取对应文件作为用户材料使用，优先级与用户当轮提供的材料相同，高于搜索素材。
+- 素材库材料是用户私有材料，其中的单位名称、数据、口径按用户提供材料对待，可直接使用；但仍须按 `reference/fact_discipline.md` 保持状态强度，不得过度推断。
+- 素材库不足或未命中时，再按搜索规则进入深知搜索流程，不得把素材库检索替代必要的政策核验。
+- 删除素材必须先向用户确认。
+
+### 写作偏好（writing_preferences.json）
+
+用户在写作过程中表达的重复性习惯，经确认后沉淀为偏好，分三类：
+
+- `content`（内容习惯）：如"总结里要写党建部分""问题分析不超过三条"。
+- `format`（排版习惯）：如"标题不用问句""落款日期用中文数字"。
+- `phrasing`（表达习惯）：如"不用'赋能''抓手'这类词""称呼统一用'贵单位'"。
+
+沉淀时机：用户明确说"以后都这样写""记住这个习惯"→ 直接保存；用户在某次修改中纠正了 Agent 的写法且该纠正具有一般性 → Agent 主动询问"是否把这条作为你的常用写作偏好"，确认后保存。
+
+```bash
+python3 scripts/local_memory.py pref save --type <content|format|phrasing> --scope <通用或文种> --rule <偏好内容> [--source <来源>]
+python3 scripts/local_memory.py pref list [--type <类型>] [--scope <范围>]
+python3 scripts/local_memory.py pref remove <偏好ID>    # 必须先经用户确认
+```
+
+应用规则：
+
+- 每次正式写作前，若偏好数量大于 0，先读取全部偏好；`scope` 命中当前文种或为"通用"的偏好均生效。
+- 用户明示的写作偏好优先于文种标准和默认排版；仅红头文件的国标版记位置等强制国标要求例外，冲突时向用户说明。
+- 偏好不得与用户当轮要求冲突：当轮要求优先。用户明确否定某条偏好时，应建议删除该条。
+- 删除偏好必须先经用户确认。
 
 ## 工作原则
 
@@ -344,6 +400,8 @@ python3 scripts/merge_search_results.py result1.json result2.json --output merge
 - 事务文书：`reference/standards/15_business_docs.md`、`reference/standards/21_explanation.md`、`reference/standards/22_application.md`、`reference/standards/23_publicity.md`、`reference/standards/24_procurement.md`
 
 写作时正文不加引用标记。执行过搜索时，正文只写正式内容，不在文末追加素材使用情况或知识专库链接；素材溯源说明作为单独 HTML 辅助文件生成，格式见 `reference/search_guide.md`。
+
+正文一律使用中文全角标点，引号使用中文全角引号 `" " ' '`，禁止英文半角引号 `"` `'`。生成正文时直接写全角引号，不依赖排版脚本转换；定稿检查时按 `reference/anti_ai_patterns.md` 核对。
 
 所有正式写作、改写、润色、压缩任务，生成正文前必须按 `reference/fact_discipline.md` 约束事实边界：材料已给事实保持原状态强度，材料未谈事项省略，占位符不得残留，改稿以最新版底稿为主线，不得为显得完整而补写责任、时限、下一步等材料没有的内容。
 

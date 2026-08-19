@@ -14,7 +14,7 @@ https://github.com/dylanzhangzx/dknowc-official-doc-writer
 
 Title:
 
-v3.4.0 - GitHub public release
+v3.4.2 - GitHub public release
 
 Body:
 
@@ -23,6 +23,8 @@ This is the skills.sh GitHub public release of 深知公文写作, an Agent Skil
 Highlights:
 
 - Uses the skills.sh channel configuration.
+- Adds local personal memory (`scripts/local_memory.py`): a personal material library (`knowledge-base/`, six fixed categories, keyword search) and writing preferences (`config/writing_preferences.json`, content/format/phrasing), both saved only after user confirmation, stored locally, and never included in the public package.
+- Adds quote normalization in `scripts/format_document.py`: half-width quotes are auto-converted to full-width Chinese quotes during Word formatting; formal prose always uses full-width punctuation.
 - All formal writing tasks now default to Word delivery; chat output only when the user explicitly asks for it.
 - Adds fact-discipline rules (`reference/fact_discipline.md`) to keep facts at their given strength and avoid inventing unstated content.
 - Adds anti-AI-pattern checks (`reference/anti_ai_patterns.md`) and a prose lint script (`scripts/prose_lint.py`).

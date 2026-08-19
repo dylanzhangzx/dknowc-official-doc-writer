@@ -93,7 +93,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.4.0`。
+当前 skills.sh Public 版基于 `3.4.2`。
 
 ## 常用测试
 
@@ -152,4 +152,6 @@ python3 scripts/source_note_html.py official-docs/input/trace-report.json --outp
 - 3.3.2 起搜索能力价值说明统一外移到独立参考文件，供 Agent 按需引用；`SKILL.md` 主说明文档不再内置营销性话术。
 - 3.3.3 起搜索能力说明统一为客观功能描述，手机号验证引导改为中性表达，相关参考文件更名为 `reference/search_intro.md`。
 - 3.4.0 起文种标准文件统一改为英文命名，避免中文文件名在部分环境引起路径错乱；新增决定/决议/命令/公报/议案、说明/申请/公示/采购公告、方案/总结/讲话稿/制度/调研/可研/审查/AI 算力等 17 个文种标准文件；新增 `reference/fact_discipline.md` 事实克制规则、`reference/anti_ai_patterns.md` 反 AI 味检查规则和 `scripts/prose_lint.py` 语言质检脚本；`SKILL.md` 按参考资料表渐进式加载重构。
+- 3.4.1 起排版脚本自动将英文半角引号规范化为中文全角引号，并明确生成端必须直接使用全角引号；所有正式写作任务默认交付 Word，执行过搜索时另附 HTML 可信溯源报告。
+- 3.4.2 起新增本地个人记忆：个人素材库 `knowledge-base/`（经用户确认保存材料，按用途六类分类并打场景标签，写作前自动检索）与写作偏好 `config/writing_preferences.json`（内容/排版/表达三类习惯，按文种范围生效，用户偏好优先于默认标准）；二者均为本机私有状态，不随公开包分发。
 - 如搜索失败或提示 API Key 未配置，请重新执行注册流程或检查环境变量 `DKNOWC_API_KEY` 是否存在且有效。

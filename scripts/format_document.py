@@ -797,7 +797,43 @@ def normalize_content_text(content_text):
     if '\n' not in content_text and '\\n' in content_text:
         content_text = content_text.replace('\\n', '\n')
 
+    # 将模型生成的英文半角引号规范化为中文全角引号。
+    # 模型在中文正文中常直接输出 ASCII 直引号，Word 交付应统一为全角标点。
+    content_text = normalize_chinese_quotes(content_text)
+
     return content_text
+
+
+def normalize_chinese_quotes(text):
+    """把英文直引号按上下文智能配对转换为中文全角引号。
+
+    规则：
+    - 英文双引号 " 转换为中文双引号 "…"。
+    - 英文单引号 ' 转换为中文单引号 '…'。
+    - 引号按出现顺序交替配对：首个为开引号，第二个为闭引号，以此类推。
+      该启发式覆盖常见公文正文；已正确的全角引号不受影响。
+    """
+    if not text:
+        return text
+    out = []
+    double_open = True   # 下一个双引号期待为开引号
+    single_open = True   # 下一个单引号期待为开引号
+    for ch in text:
+        if ch == '"':
+            if double_open:
+                out.append('“')   # "
+            else:
+                out.append('”')   # "
+            double_open = not double_open
+        elif ch == "'":
+            if single_open:
+                out.append('‘')   # '
+            else:
+                out.append('’')   # '
+            single_open = not single_open
+        else:
+            out.append(ch)
+    return ''.join(out)
 
 
 def is_plain_document_title(line):
