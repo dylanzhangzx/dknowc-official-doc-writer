@@ -45,7 +45,7 @@ API Key 按需配置：
 
 ## 需要搜索时，注册并配置深知搜索 API Key
 
-只有当前任务需要深知搜索（政策依据、数据支撑、案例参考，或查最新政策、最新情况）时才需要配置 API Key。配置 API Key 后，深知公文写作可调用深知可信搜索，从权威文件库中检索政策依据、权威数据和典型案例，检索结果附原文来源，便于写作时引用和核验。不涉及搜索的写作任务无需配置 Key，可直接使用。向用户介绍搜索能力时可参考 `reference/search_intro.md` 中的说明素材。
+只有当前任务需要深知搜索（政策依据、数据支撑、案例参考，或查最新政策、最新情况）时才需要配置 API Key。配置 API Key 后，深知公文写作可调用深知可信搜索，从权威文件库中检索政策依据、权威数据和典型案例，检索结果附原文来源，便于写作时引用和核验。不涉及搜索的写作任务无需配置 Key，可直接使用。向用户介绍搜索能力与开通引导话术时可参考 `reference/search_intro.md`；用户犹豫时可用 `reference/sample_search_result.md` 与 `reference/sample_trace_report.html` 展示检索结果和可信溯源报告的效果（示例数据，仅供展示）。
 
 skills.sh 版默认使用：
 
@@ -93,7 +93,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.4.3`。
+当前 skills.sh Public 版基于 `3.4.4`。
 
 ## 常用测试
 
@@ -154,4 +154,6 @@ python3 scripts/source_note_html.py official-docs/input/trace-report.json --outp
 - 3.4.0 起文种标准文件统一改为英文命名，避免中文文件名在部分环境引起路径错乱；新增决定/决议/命令/公报/议案、说明/申请/公示/采购公告、方案/总结/讲话稿/制度/调研/可研/审查/AI 算力等 17 个文种标准文件；新增 `reference/fact_discipline.md` 事实克制规则、`reference/anti_ai_patterns.md` 反 AI 味检查规则和 `scripts/prose_lint.py` 语言质检脚本；`SKILL.md` 按参考资料表渐进式加载重构。
 - 3.4.1 起排版脚本自动将英文半角引号规范化为中文全角引号，并明确生成端必须直接使用全角引号；所有正式写作任务默认交付 Word，执行过搜索时另附 HTML 可信溯源报告。
 - 3.4.2 起新增本地个人记忆：个人素材库 `knowledge-base/`（经用户确认保存材料，按用途六类分类并打场景标签，写作前自动检索）与写作偏好 `config/writing_preferences.json`（内容/排版/表达三类习惯，按文种范围生效，用户偏好优先于默认标准）；二者均为本机私有状态，不随公开包分发。
+- 3.4.3 起注册渠道埋点：sendMessage 与 register 请求体统一固定携带 `channel` 字段（skills.sh 渠道码），用于注册行为渠道细分统计。
+- 3.4.4 起开通搜索的注册引导优化：先价值后验证（禁止开口就要手机号）、引导时机后移（搜索方案确认后再引导）、给出退路（拒绝时不纠缠，基于已有材料先写并标注"待补"）、交付后轻提示；`reference/search_intro.md` 重写为能力数据（600 万篇规范性文件 / 7000 万篇可溯源权威公开资料 / 每日更新 / 54 行业 300 地市 2800 县）+ 安全边界 + 四类分场景话术，新增 `reference/sample_search_result.md` 与 `reference/sample_trace_report.html` 效果示例。
 - 如搜索失败或提示 API Key 未配置，请重新执行注册流程或检查环境变量 `DKNOWC_API_KEY` 是否存在且有效。
