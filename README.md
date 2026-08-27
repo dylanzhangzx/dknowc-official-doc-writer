@@ -93,7 +93,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.4.4`。
+当前 skills.sh Public 版基于 `3.4.5`。
 
 ## 常用测试
 
@@ -156,4 +156,5 @@ python3 scripts/source_note_html.py official-docs/input/trace-report.json --outp
 - 3.4.2 起新增本地个人记忆：个人素材库 `knowledge-base/`（经用户确认保存材料，按用途六类分类并打场景标签，写作前自动检索）与写作偏好 `config/writing_preferences.json`（内容/排版/表达三类习惯，按文种范围生效，用户偏好优先于默认标准）；二者均为本机私有状态，不随公开包分发。
 - 3.4.3 起注册渠道埋点：sendMessage 与 register 请求体统一固定携带 `channel` 字段（skills.sh 渠道码），用于注册行为渠道细分统计。
 - 3.4.4 起开通搜索的注册引导优化：先价值后验证（禁止开口就要手机号）、引导时机后移（搜索方案确认后再引导）、给出退路（拒绝时不纠缠，基于已有材料先写并标注"待补"）、交付后轻提示；`reference/search_intro.md` 重写为能力数据（600 万篇规范性文件 / 7000 万篇可溯源权威公开资料 / 每日更新 / 54 行业 300 地市 2800 县）+ 安全边界 + 四类分场景话术，新增 `reference/sample_search_result.md` 与 `reference/sample_trace_report.html` 效果示例。
+- 3.4.5 起新增多轮改稿工作流 `reference/revision_workflow.md`（以最新版 Word 为唯一底稿、意见拆解为结构/表达动作逐条落实并汇报、修改粒度对齐、默认复用搜索结果不重复检索、引用变化同步更新溯源 HTML、每轮交付 `_v1`/`_v2` 新版）；新增成稿快速自检（每次生成 Word 前默认执行 5 项：事实有据/结构完整/无占位残留/无 AI 味/格式合规，不合格先修正再交付）。
 - 如搜索失败或提示 API Key 未配置，请重新执行注册流程或检查环境变量 `DKNOWC_API_KEY` 是否存在且有效。

@@ -7,7 +7,7 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并单独生成所有材料的溯源说明与原文清单，帮助用户写得有依据、能复核、可交付。正式交付时支持生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and generate a separate source-reference report. Final outputs can be generated as Word documents, and red-head document formatting is supported when explicitly requested by the user."
 category: "通用办公"
-version: "3.4.4"
+version: "3.4.5"
 author: "彩智科技"
 permissions:
   network:
@@ -123,6 +123,7 @@ https://platform.dknowc.cn/
 | 文件 | 阶段 | 加载条件 |
 | --- | --- | --- |
 | `reference/task_router.md` | 任务开始 | 判断任务类型与复杂度，所有任务先读 |
+| `reference/revision_workflow.md` | 改稿轮 | 用户基于已交付 Word 提修改意见的连续改稿 |
 | `reference/fact_discipline.md` | 起草/改稿前 | 所有正式写作任务，约束事实边界 |
 | `reference/anti_ai_patterns.md` | 定稿前/审查 | 正式正文语言复核、去 AI 味、审查模式 |
 | `scripts/prose_lint.py` | 定稿前 | 检查草稿语言、格式、重复风险（可选） |
@@ -236,6 +237,7 @@ python3 scripts/local_memory.py pref remove <偏好ID>    # 必须先经用户�
 - 普通通知、函、短报告：必要时追问少量关键信息，然后生成。
 - 请示、复函、政策依据型报告：通常需要搜索，按搜索规则执行。
 - 管理办法、实施方案、调研报告、工作总结、产业研究总结：通常先确认大纲或搜索方案，再生成 Word。
+- 用户基于已交付 Word 提修改意见（"第二段太长""落款改一下""再加一节"等）：进入改稿轮，按 `reference/revision_workflow.md` 执行——以最新版 Word 为唯一底稿，逐条落实并汇报，默认不重复已完成搜索，交付 `_v1`/`_v2` 新版本。
 - 用户要求“看看有什么问题”：进入 Reviewer 模式，优先输出问题清单。
 - 用户要求“生成 Word”：只生成普通 Word。
 - 用户明确要求“红头文件/红头版/套红头/生成红头”：先生成普通 Word，再使用代码化红头脚本生成红头文件。
@@ -437,6 +439,16 @@ python3 scripts/merge_search_results.py result1.json result2.json --output merge
 - 生成 Word 时允许使用标准 Markdown 表格。普通竖版表格建议控制在 3-6 列；超过 6 列的宽表、用户明确要求“横排表格”的表格，或表格前一行写有 `<!-- landscape-table -->` 标记时，排版脚本会单独切换到横向 A4 页面生成表格，再恢复竖向正文。
 - 表格跨页时不重复表头；排版脚本会尽量避免同一行、同一单元格内容被拆到两页。若单个单元格内容过长，Word 仍可能强制分页，因此长内容应改为正文段落或分条说明。
 - 表格内容应简洁可读。若单元格主要是长段落，应改为正文段落、分条说明、清单或附件，不应塞入正文表格。
+
+成稿快速自检（每次生成 Word 前默认执行，逐项过、不合格先自查修正再交付，不向用户输出自检过程）：
+
+1. **事实有据**：政策名、文号、数字、日期要么来自用户材料或素材库，要么来自深知搜索结果；凭印象写的高风险表述（全国首个/领先/唯一等）删除或降级为概括表述。
+2. **结构完整**：文种必需要素齐全（标题、主送、正文、结语、落款、成文日期；请示有请批事项和请批语，报告不带请批），无缺失章节。
+3. **无占位残留**：正文无 XX单位、XXXX万元、〔待补充〕、YYYY年MM月DD日 等未处理占位（用户明确要求模板稿除外）。
+4. **无 AI 味**：无旁白句（"本文将…"）、思考泄露（"作为AI…"）、口号式收尾（"提供有力支撑"）、Markdown 残留（**加粗**/###/代码块）；引号一律中文全角。可选运行 `python3 scripts/prose_lint.py <草稿> --format` 辅助确认，命中项结合上下文判断处理，不作机械清洗。
+5. **格式合规**：表格有表题且连续编号、表题非标题语法；落款日期格式正确；字数符合用户要求（有明确上限时先自检字数）。
+
+自检在生成 Word 的临时正文文件上完成，修正后重新写入再调用排版脚本；不得跳过自检直接交付，也不得把自检结果当作长篇审稿报告发给用户。
 
 ## 审查规则
 
