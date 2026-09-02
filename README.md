@@ -93,7 +93,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.4.5`。
+当前 skills.sh Public 版基于 `3.5.0`。
 
 ## 常用测试
 
@@ -157,4 +157,6 @@ python3 scripts/source_note_html.py official-docs/input/trace-report.json --outp
 - 3.4.3 起注册渠道埋点：sendMessage 与 register 请求体统一固定携带 `channel` 字段（skills.sh 渠道码），用于注册行为渠道细分统计。
 - 3.4.4 起开通搜索的注册引导优化：先价值后验证（禁止开口就要手机号）、引导时机后移（搜索方案确认后再引导）、给出退路（拒绝时不纠缠，基于已有材料先写并标注"待补"）、交付后轻提示；`reference/search_intro.md` 重写为能力数据（600 万篇规范性文件 / 7000 万篇可溯源权威公开资料 / 每日更新 / 54 行业 300 地市 2800 县）+ 安全边界 + 四类分场景话术，新增 `reference/sample_search_result.md` 与 `reference/sample_trace_report.html` 效果示例。
 - 3.4.5 起新增多轮改稿工作流 `reference/revision_workflow.md`（以最新版 Word 为唯一底稿、意见拆解为结构/表达动作逐条落实并汇报、修改粒度对齐、默认复用搜索结果不重复检索、引用变化同步更新溯源 HTML、每轮交付 `_v1`/`_v2` 新版）；新增成稿快速自检（每次生成 Word 前默认执行 5 项：事实有据/结构完整/无占位残留/无 AI 味/格式合规，不合格先修正再交付）。
+- 3.4.6 起针对宿主环境（WorkBuddy 等）实测反馈优化：注册成功后立即告知额度与赠金信息（自带 300 次免费额度 + 到深知 MaaS 平台 `https://platform.dknowc.cn/` 实名认证可额外获赠 100 元体验金，不等额度用完才提）；搜索接口新增 `quota_exhausted` 余额不足识别（HTTP 402/403 或错误信息命中关键词时返回 `quota_exhausted=true`），命中后禁止任何形式的重试，立即引导用户到 MaaS 平台处理；新增 `scripts/deliver_outputs.py`，交付前自动探测宿主工作区（`--dest` > 环境变量 > WorkBuddy 最新时间戳工作区的 outputs/ > 当前目录）并把 Word 与可信溯源报告 HTML 复制过去，探测不到时返回 `need_dest=true` 要求补 `--dest`，解决产出物用户不可见的问题。
+- 3.5.0 起可信溯源报告升级为可信溯源核验报告：打开第一屏即展示核验报告单（依据溯源/引用绑定/时效检查/类型覆盖/成稿自检五项指标，全部由脚本真实计算，缺链接标待补、未绑定标红、自检未记录不装通过）；报告式布局（深色顶栏 + 正文分节卡片 + 右栏核验材料面板，删除聊天式问题气泡）；素材四分类色系与类型筛选；未引用素材分组、浏览器打印归档样式；溯源 JSON 新增 `self_check` 必填字段与 `materials[].type` 四分类枚举，文件名改为 `标题_可信核验报告.html`。
 - 如搜索失败或提示 API Key 未配置，请重新执行注册流程或检查环境变量 `DKNOWC_API_KEY` 是否存在且有效。
