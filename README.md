@@ -41,7 +41,7 @@ node --version
 API Key 按需配置：
 
 - 不涉及搜索的任务（简单通知、改写润色、只生成 Word 等）：不要求配置 API Key，可直接使用。
-- 需要搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）：此时若初始化结果显示 `api_key_configured=false` 或 `search_ready=false`，先引导用户完成 MaaS 注册获取 Key，并将 Key 写入环境变量 `DKNOWC_API_KEY`，再继续执行搜索。注册成功后，本次任务应使用脚本返回的 Key 临时注入当前运行环境继续初始化；后续新对话如仍检测不到 Key，应提示用户重启 WorkBuddy。
+- 需要搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）：此时若初始化结果显示 `api_key_configured=false` 或 `search_ready=false`，先引导用户完成 MaaS 注册获取 Key，并将 Key 写入环境变量 `DKNOWC_API_KEY`，再继续执行搜索。注册成功后无需重启：脚本在进程环境变量缺失时自动从 ~/.zshrc 读取 Key（部分宿主版本不再向会话注入 shell 环境变量，直读文件不受影响）。
 
 ## 需要搜索时，注册并配置深知搜索 API Key
 
@@ -89,11 +89,11 @@ https://platform.dknowc.cn/
 https://open.dknowc.cn/dependable/search/
 ```
 
-API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不得写入公开包。注册脚本可将 Key 写入本机 `~/.zshrc`；写入后如后续新对话仍检测不到环境变量，需要重启 WorkBuddy。
+API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不得写入公开包。注册脚本可将 Key 写入本机 `~/.zshrc`；脚本读取顺序为进程环境变量优先、缺失时自动解析 `~/.zshrc`，无需重启宿主。
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.5.0`。
+当前 skills.sh Public 版基于 `3.5.2`。
 
 ## 常用测试
 
@@ -145,7 +145,7 @@ python3 scripts/source_note_html.py official-docs/input/trace-report.json --outp
 - 本版本不内置 API Key。API Key 只对需要深知搜索的任务是前置条件；不涉及搜索的简单通知、改写润色、只生成 Word 等任务可直接使用。
 - 需要搜索时，用户可通过 Agent 调用 `scripts/register.mjs`，用手机号和验证码注册 MaaS 账号并获取统一 API Key。
 - 注册成功后，脚本会把 API Key 写入 `~/.zshrc` 中的环境变量 `DKNOWC_API_KEY`，用户不需要查看或手动配置 Key。
-- 写入后当前任务可使用返回的 Key 临时注入环境变量继续执行；后续新对话如仍检测不到 Key，提示用户重启 WorkBuddy。
+- 写入后脚本可直接从 `~/.zshrc` 读取，无需重启宿主。
 - 公文范文大纲、深知搜索、素材分类、Word 生成、表格排版、HTML 可信溯源、红头 Word 和异常处理等功能逻辑与主干完整版一致。
 - 3.3.0 起将“素材来源说明”升级为“可信溯源报告”：报告包含完整正文、可点击来源角标、来源卡片和知识专库链接，便于核验正文依据。
 - 3.3.1 起 API Key 改为按需前置：搜索类任务需要 Key，纯写作任务无需配置即可使用；需要 Key 时会给用户说明搜索能力价值。
@@ -159,4 +159,6 @@ python3 scripts/source_note_html.py official-docs/input/trace-report.json --outp
 - 3.4.5 起新增多轮改稿工作流 `reference/revision_workflow.md`（以最新版 Word 为唯一底稿、意见拆解为结构/表达动作逐条落实并汇报、修改粒度对齐、默认复用搜索结果不重复检索、引用变化同步更新溯源 HTML、每轮交付 `_v1`/`_v2` 新版）；新增成稿快速自检（每次生成 Word 前默认执行 5 项：事实有据/结构完整/无占位残留/无 AI 味/格式合规，不合格先修正再交付）。
 - 3.4.6 起针对宿主环境（WorkBuddy 等）实测反馈优化：注册成功后立即告知额度与赠金信息（自带 300 次免费额度 + 到深知 MaaS 平台 `https://platform.dknowc.cn/` 实名认证可额外获赠 100 元体验金，不等额度用完才提）；搜索接口新增 `quota_exhausted` 余额不足识别（HTTP 402/403 或错误信息命中关键词时返回 `quota_exhausted=true`），命中后禁止任何形式的重试，立即引导用户到 MaaS 平台处理；新增 `scripts/deliver_outputs.py`，交付前自动探测宿主工作区（`--dest` > 环境变量 > WorkBuddy 最新时间戳工作区的 outputs/ > 当前目录）并把 Word 与可信溯源报告 HTML 复制过去，探测不到时返回 `need_dest=true` 要求补 `--dest`，解决产出物用户不可见的问题。
 - 3.5.0 起可信溯源报告升级为可信溯源核验报告：打开第一屏即展示核验报告单（依据溯源/引用绑定/时效检查/类型覆盖/成稿自检五项指标，全部由脚本真实计算，缺链接标待补、未绑定标红、自检未记录不装通过）；报告式布局（深色顶栏 + 正文分节卡片 + 右栏核验材料面板，删除聊天式问题气泡）；素材四分类色系与类型筛选；未引用素材分组、浏览器打印归档样式；溯源 JSON 新增 `self_check` 必填字段与 `materials[].type` 四分类枚举，文件名改为 `标题_可信核验报告.html`。
+- 3.5.1 起 frontmatter category 改为 "office-efficiency"（平台"办公效率"类目 slug）：原中文值"通用办公"匹配不到平台类目枚举，疑似因此被算法按描述关键词归类到"内容创作"，本版验证 category 字段对平台分类的映射作用；功能与 3.5.0 完全一致。
+- 3.5.2 起修复外部公文专家测试反馈的格式问题：落款双段定位（单位右空两字、日期首字右移两字，日期长于署名时按 GB/T 9704—2012 第二分支定位）；联系人电话按行文方向规范位置（下行文入正文、上行文必须写、平行文可选）；字体表述仅在用户问到时用全称"仿宋_GB2312"回答、禁止简写"仿宋"（交付时不主动说明字体）；Word 正文与元数据均不保留 AI 生成提示，AI 标识仅由交付话术承担。版记自动生成功能经多方案实测后回退（docx 格式不含分页信息，自动版记在 Word/WPS 中的分页行为不可控）：普通 Word 不自动生成版记，需要版记时建议手工补充或改用红头文件（红头脚本生成国标版记）。API Key 读取兼容宿主环境变量隔离（WorkBuddy 5.5.3 疑似安全更新后不再向会话注入 shell 环境变量——新增 api_key.py 统一解析，环境变量缺失时自动读 ~/.zshrc，注册写入后即时生效、无需重启宿主）。
 - 如搜索失败或提示 API Key 未配置，请重新执行注册流程或检查环境变量 `DKNOWC_API_KEY` 是否存在且有效。

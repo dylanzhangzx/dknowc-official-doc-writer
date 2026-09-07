@@ -6,8 +6,8 @@ display_name_en: "dknowc official doc writer"
 description: "深知公文写作，是面向单位办公室、综合岗、文秘、材料岗和企事业单位用户的正式材料写作助手。核心用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿，整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。可进行起草、改写、润色、扩写、压缩、标题优化、结构调整、语气统一和内容审查。涉及政策依据、数据支撑、标准规范或案例参考时，可调用深知可信搜索获取素材，并单独生成可信核验报告，帮助用户写得有依据、能复核、可交付。正式交付时支持生成 Word 文档；用户明确需要时，也可生成红头文件。"
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并单独生成所有材料的溯源说明与原文清单，帮助用户写得有依据、能复核、可交付。正式交付时支持生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and generate a separate source-reference report. Final outputs can be generated as Word documents, and red-head document formatting is supported when explicitly requested by the user."
-category: "通用办公"
-version: "3.5.0"
+category: "office-efficiency"
+version: "3.5.2"
 author: "彩智科技"
 permissions:
   network:
@@ -32,7 +32,7 @@ secrets:
 
 ## 权限说明
 
-本 Skill 会访问 `https://open.dknowc.cn/` 用于公文范文大纲、深知可信搜索和可信核验报告整理；访问 `https://platform.dknowc.cn/` 用于 MaaS 手机号验证码注册、API Key 获取和管理平台地址说明。运行过程中会读取本 Skill 的规则、标准、配置和参考资料文件，并在本地写入初始化状态文件、用户授权保存的写作偏好、生成的 Word 文档、可信核验报告和搜索结果中间文件。MaaS 注册取 Key 成功后，会把 `DKNOWC_API_KEY` 配置块写入本机 `~/.zshrc`，用于后续新会话读取。Skill 包内不包含真实 API Key，API Key 必须通过环境变量 `DKNOWC_API_KEY` 注入，不得硬编码，不得写入公开包，不得在对话中展示完整内容。
+本 Skill 会访问 `https://open.dknowc.cn/` 用于公文范文大纲、深知可信搜索和可信核验报告整理；访问 `https://platform.dknowc.cn/` 用于 MaaS 手机号验证码注册、API Key 获取和管理平台地址说明。运行过程中会读取本 Skill 的规则、标准、配置和参考资料文件，并在本地写入初始化状态文件、用户授权保存的写作偏好、生成的 Word 文档、可信核验报告和搜索结果中间文件。MaaS 注册取 Key 成功后，会把 `DKNOWC_API_KEY` 配置块写入本机 `~/.zshrc`；脚本读取顺序为进程环境变量优先、缺失时自动解析该文件。Skill 包内不包含真实 API Key，API Key 必须通过环境变量 `DKNOWC_API_KEY` 注入，不得硬编码，不得写入公开包，不得在对话中展示完整内容。
 
 ## 设计模式
 
@@ -84,7 +84,7 @@ python3 scripts/initialize.py
 也可以先不开通：我基于你手头的材料先写，政策依据的位置先标注"待补"。
 ```
 
-引导配置时，用户提供手机号和收到的验证码即可。注册和获取 Key 由 Agent 处理；获取到的 Key 必须写入本机 `~/.zshrc` 中的环境变量 `DKNOWC_API_KEY`。写入后，本次任务应使用脚本返回的 Key 临时注入当前运行环境并继续初始化；后续新对话如仍检测不到 Key，应提示用户重启 WorkBuddy。
+引导配置时，用户提供手机号和收到的验证码即可。注册和获取 Key 由 Agent 处理；获取到的 Key 必须写入本机 `~/.zshrc` 中的环境变量 `DKNOWC_API_KEY`。写入后无需重启宿主：初始化与搜索脚本在进程环境变量缺失时会自动从 ~/.zshrc 解析 DKNOWC_API_KEY（部分宿主版本不再向会话注入 shell 环境变量，脚本直读文件不受影响）。
 
 MaaS 初始化按两步流程执行：
 
@@ -100,7 +100,7 @@ node scripts/register.mjs send --phone <手机号>
 node scripts/register.mjs register --phone <手机号> --vcode <验证码> --organ 个人 --name 用户
 ```
 
-脚本默认固定 `type=6`（深知可信搜索），自动使用 skills.sh 渠道码 `8C8D411C-6A46-4E99-887D-87D9A1329930`，并固定携带 `source="agent"`。手机号已注册时，脚本默认查回该账号已有可用 API Key；手机号未注册时，按 MaaS 注册流程创建账号并获取 API Key。成功后，脚本会把 API Key 写入 `~/.zshrc` 中的 `DKNOWC_API_KEY` 配置块，并返回环境变量名、API Key 和写入状态，仅供 Agent 当前任务临时注入环境变量使用。不得向用户展示完整 API Key，不得要求用户手动复制 API Key。当前任务应使用脚本返回的 Key 重新运行初始化检查；确认通过后继续处理用户原任务。后续新对话如仍检测不到 `DKNOWC_API_KEY`，提示用户重启 WorkBuddy 后再试。
+脚本默认固定 `type=6`（深知可信搜索），自动使用 skills.sh 渠道码 `8C8D411C-6A46-4E99-887D-87D9A1329930`，并固定携带 `source="agent"`。手机号已注册时，脚本默认查回该账号已有可用 API Key；手机号未注册时，按 MaaS 注册流程创建账号并获取 API Key。成功后，脚本会把 API Key 写入 `~/.zshrc` 中的 `DKNOWC_API_KEY` 配置块，并返回环境变量名、API Key 和写入状态，仅供 Agent 当前任务临时注入环境变量使用。不得向用户展示完整 API Key，不得要求用户手动复制 API Key。当前任务应使用脚本返回的 Key 重新运行初始化检查；确认通过后继续处理用户原任务。脚本读取 Key 的顺序：进程环境变量优先，缺失时自动解析 ~/.zshrc 中的 DKNOWC_API_KEY，无需重启宿主。
 
 注册成功后必须随即告知用户额度与赠金信息：开通自带 300 次免费体验额度；另外到深知 MaaS 官网 `https://platform.dknowc.cn/` 完成实名认证，可额外获赠 100 元体验金（以平台页面展示为准），建议顺手完成——不要等额度用完才提。后续搜索返回 `quota_exhausted=true`（额度或余额用尽）时，按"搜索异常处理"立即停止重试并引导用户到该地址处理。
 
@@ -221,7 +221,13 @@ python3 scripts/local_memory.py pref remove <偏好ID>    # 必须先经用户�
 - 只有用户明确说“直接在对话里给正文”“不要生成 Word”“先看文字草稿”时，才在聊天中输出正文全文。
 - 正式写作任务不得先在对话中发送“正文初稿”“压缩版”“预览版”或完整正文；应直接生成 Word，只给简短说明和文件路径。
 - 正式公文 Word 默认保持纯净：正文中不得附带来源角标、`【素材使用情况】`、`【知识专库链接】` 或长 URL；执行过搜索时，可信溯源信息单独生成 HTML 辅助交付物。
-- 生成的普通 Word 文档末尾必须保留 `【AI生成提示】内容由AI生成，内容仅供参考。`，这是普通 Word 正式交付的固定要求；红头文件为保证国标版记排版，不保留该提示，红头脚本会自动移除普通 Word 中已有提示。
+- Word 正文不内嵌 AI 生成提示，docx 属性元数据同样不写入——本 Skill 的定位是经可信核验的可交付成稿，文件内任何位置都不保留 AI 提示痕迹。AI 生成标识仅由交付时的话术承担：必须在对话中说明一句（自然口吻，不逐字照抄）：本稿由 AI 辅助生成、依据已经过可信核验，建议按单位审签流程核批后正式行文。排版脚本会过滤正文输入中误带的旧版提示行，红头脚本仍会自动移除存量稿件正文中的旧版 AI 提示行。
+
+字体表述规范：交付时不主动说明字体（格式规范已内置，无需赘述）；仅在用户问到字体或对字体有疑问时回答，且一律写全称"仿宋_GB2312（公文标准字体）"，禁止简写"仿宋"——两者是字体库中的不同字体，简写会误导用户。
+
+版记：普通 Word 不自动生成版记（docx 格式不含分页信息，自动版记的分页行为在 Word/WPS 中不可控，实测会出现版记单独成页或推挤落款翻页）；用户明确要求版记时，如实说明该限制，建议由用户在 Word 中于落款之后手工补充，或改用红头文件（红头脚本生成国标版记）。正文中的"抄送：××机关。"行按普通正文段落排版。
+
+落款与联系人（按行文方向）：落款单位右空两字、成文日期首字在单位首字右移两字处，均由脚本自动处理；联系人电话写入正文相关事项段，不得独立成结尾最后一段——上行文必须写明，平行文可用可不用，下行文不作强制要求（详见各文种标准）。
 - Markdown 草稿只能作为生成 Word 的内部临时文件；不得向用户展示、链接、发送或要求用户审阅 `.md` 草稿。
 - 生成 Word 时，凡正文超过一行，必须先写入临时 `.txt` 或 `.md` 文件，再把文件路径作为 `scripts/format_document.py` 的输入参数；不得把整篇多行正文直接塞进 `--text` 参数，也不得用临时 Python 脚本直接手写 `python-docx` 生成正式交付文件。
 - 默认只生成普通 Word；只有用户明确说“红头文件”“红头版”“套红头”“生成红头”时，才生成红头文件。
@@ -447,7 +453,7 @@ python3 scripts/merge_search_results.py result1.json result2.json --output merge
 成稿快速自检（每次生成 Word 前默认执行，逐项过、不合格先自查修正再交付，不向用户输出自检过程）：
 
 1. **事实有据**：政策名、文号、数字、日期要么来自用户材料或素材库，要么来自深知搜索结果；凭印象写的高风险表述（全国首个/领先/唯一等）删除或降级为概括表述。
-2. **结构完整**：文种必需要素齐全（标题、主送、正文、结语、落款、成文日期；请示有请批事项和请批语，报告不带请批），无缺失章节。
+2. **结构完整**：文种必需要素齐全（标题、主送、正文、结语、落款、成文日期；请示有请批事项和请批语，报告不带请批），无缺失章节；联系人电话须写入正文相关事项段，结尾不得出现独立的联系人电话段（上行文必须写明、平行文可选、下行文不强制，见各文种标准）。
 3. **无占位残留**：正文无 XX单位、XXXX万元、〔待补充〕、YYYY年MM月DD日 等未处理占位（用户明确要求模板稿除外）。
 4. **无 AI 味**：无旁白句（"本文将…"）、思考泄露（"作为AI…"）、口号式收尾（"提供有力支撑"）、Markdown 残留（**加粗**/###/代码块）；引号一律中文全角。可选运行 `python3 scripts/prose_lint.py <草稿> --format` 辅助确认，命中项结合上下文判断处理，不作机械清洗。
 5. **格式合规**：表格有表题且连续编号、表题非标题语法；落款日期格式正确；字数符合用户要求（有明确上限时先自检字数）。

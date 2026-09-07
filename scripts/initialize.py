@@ -123,16 +123,22 @@ def _module_available(module_name):
 
 
 def check_api_key_config():
-    api_key = os.environ.get(API_KEY_ENV, "").strip()
+    # 环境变量优先，缺失时从 ~/.zshrc 兜底解析（宿主进程早于 key 写入启动时不误报缺失）
+    try:
+        from api_key import resolve_api_key
+        api_key, source = resolve_api_key()
+    except ImportError:
+        api_key = os.environ.get(API_KEY_ENV, "").strip()
+        source = "environment" if api_key else ""
     if not _valid_api_key(api_key):
         return {
             "api_key_configured": False,
             "api_key_source": None,
-            "api_key_hint": f"缺少环境变量 {API_KEY_ENV}，请先通过 MaaS 初始化获取 API Key，并由 Agent 或平台密钥配置写入该环境变量。",
+            "api_key_hint": f"环境变量 {API_KEY_ENV} 与 ~/.zshrc 中均未找到有效 API Key，请先通过 MaaS 初始化获取。",
         }
     return {
         "api_key_configured": True,
-        "api_key_source": "environment",
+        "api_key_source": source,
         "api_key_hint": None,
     }
 

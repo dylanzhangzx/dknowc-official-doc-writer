@@ -59,7 +59,11 @@ def load_api_key(config_path: Optional[Path] = None) -> str:
     if config_path is not None:
         raise ValueError(f"当前版本不再读取 config.ini，请通过环境变量 {API_KEY_ENV} 配置 API Key。")
 
-    api_key = os.environ.get(API_KEY_ENV, "").strip()
+    try:
+        from api_key import resolve_api_key
+        api_key, _key_source = resolve_api_key()
+    except ImportError:
+        api_key = os.environ.get(API_KEY_ENV, "").strip()
     if not api_key or api_key in {"your_api_key_here", "你的深知搜索 API Key"}:
         raise ValueError(f"API Key 为空，请通过环境变量 {API_KEY_ENV} 配置有效 API Key。")
     return api_key
