@@ -61,6 +61,7 @@ def check_environment():
         search_blocking_issues.append("api_key_missing")
     return {
         "python": platform.python_version(),
+        "python_executable": sys.executable,
         "python3_available": python3_available,
         "python_docx": python_docx_available,
         "requests": requests_available,
@@ -72,6 +73,16 @@ def check_environment():
         "search_ready": config_status["api_key_configured"] and requests_available,
         "search_blocking_issues": search_blocking_issues,
         "search_note": None if config_status["api_key_configured"] else f"环境变量 {API_KEY_ENV} 中未配置有效 API Key；仅当任务需要深知搜索（查政策依据、数据支撑、案例参考）时才需要配置，不涉及搜索的写作任务可直接使用。",
+        # guide_message：需要搜索但 Key 未配置时给用户的引导话术（S1 三段式：价值 / 开通方式 / 退路+样例钩子）。
+        # Agent 在搜索方案确认后向用户转述本话术（可结合任务补充上下文），要素不得删改。
+        "guide_message": None if config_status["api_key_configured"] else (
+            "这份材料需要引用政策原文和权威数据，凭印象写政策名和数字，审稿时最容易被挑出来。"
+            "开通权威检索后，每条政策、数据都带原文出处、可点开核验。\n"
+            "开通是免费的：自带 300 次权威检索额度，完成实名认证还能再领 100 元体验金。"
+            "只需手机号收一次验证码——两步、约 10 秒，不用去网站，剩下的我来办；手机号仅用于本次验证，不会有营销骚扰。\n"
+            "也可以先不开通：我基于你手头的材料先写，政策依据的位置先标注'待补'。"
+            "想先看看开通后生成的核验报告长什么样，我可以发你一份示例看看。"
+        ),
         "font_note": "Word 文档会写入公文常用字体名称；打开端如缺少对应字体，Word/WPS 可能自动替换，需以本机打开后的显示为准。",
         "blocking_issues": blocking_issues,
         "ready": not blocking_issues,
@@ -85,7 +96,13 @@ def check_environment():
         },
         "dependency_install_prompt_needed": bool(dependency_issues) and not state.get("dependency_install_declined"),
         "install_hint": "经用户同意后，可执行 python3 -m pip install python-docx requests" if dependency_issues else None,
-        "maas_platform_url": "https://platform.dknowc.cn/",
+        # env_message：组件缺失时给用户的统一话术——不暴露组件名（python-docx/requests 对用户无意义）；
+        # 就绪时不输出任何环境话题。多 Python 环境下检测口径以 python_executable 为准。
+        "env_message": (
+            "检测到本机写作环境需要补装两个小组件（约 10 秒，只装一次），我现在装好可以吗？"
+            if dependency_issues else None
+        ),
+        "maas_platform_url": "https://platform.dknowc.cn/auth/#/login",
         "environment_state": {
             "dependency_install_declined": bool(state.get("dependency_install_declined")),
         },

@@ -11,10 +11,11 @@
 - 任务路由：`reference/task_router.md` 定义简单任务、常规任务、复杂任务和高风险任务的处理方式。
 - 质量审查：`reference/review_checklist.md` 定义公文内容、可信溯源、文种专项和 Word 输出检查项。
 - Word 排版：通过 `scripts/format_document.py` 生成普通格式 `.docx`，支持标准 Markdown 表格和宽表横向页面。
-- 溯源核验报告：执行过搜索时，通过 `scripts/source_note_html.py` 和 `scripts/render_trace_html.py` 生成独立 HTML 溯源核验报告。
+- 溯源核验报告：执行过搜索时，通过 `scripts/source_note_html.py` 和 `scripts/render_trace_html.py` 生成独立 HTML 溯源核验报告（含原文标题链、原文原段标注、高可信标识、未引用召回与检索筛选）。
 - 已有 Word 审查：通过 `scripts/review_document.py` 只读提取已有 `.docx` 的格式信息和待核验事实表述。
 - 红头文件：通过 `scripts/template_generator.py` 代码化生成红头和表尾，不依赖 `templates/` 中的 Word 模板。
-- PDF：当前主干版本不支持自动生成 PDF；用户明确要求 PDF 时，交付 `.docx` 并建议用户使用本机 Word/WPS 另存或导出为 PDF。
+- 个人素材库与写作偏好：`scripts/local_memory.py` 管理本机私有素材库与偏好（不随公开包分发）。
+- PDF：当前版本不支持自动生成 PDF；用户明确要求 PDF 时，交付 `.docx` 并建议用户使用本机 Word/WPS 另存或导出为 PDF。
 
 ## 依赖
 
@@ -22,11 +23,9 @@
 pip3 install python-docx requests
 ```
 
-`Python`、`python-docx`、`requests` 是运行本 Skill 的基础前置条件。初始化检查如显示 `ready=false`，应先完成缺失项处理，并重新检查通过后再继续执行搜索、写作、Word、红头或可信溯源报告 HTML 生成。有效 API Key 只对需要深知搜索的任务是前置条件；不涉及搜索的写作任务无需配置 Key。
+`Python`、`python-docx`、`requests` 是运行本 Skill 的基础前置条件。初始化检查如显示 `ready=false`，应先完成缺失项处理，并重新检查通过后再继续执行搜索、写作、Word、红头或溯源核验报告 HTML 生成。有效 API Key 只对需要深知搜索的任务是前置条件；不涉及搜索的写作任务无需配置 Key。
 
 标准公文字体不随 Skill 分发，字体也不作为初始化阻断项。Word 文档会写入公文常用字体名称；如打开端缺少对应字体，Word/WPS 可能自动替换，需以本机打开后的显示为准。
-
-当前版本不内置 PDF 生成或转换依赖。正式公文主交付物为 `.docx`；如用户需要 PDF，应使用 Word/WPS 打开 `.docx` 后另存或导出。
 
 还需要 Node.js 18+ 用于调用 MaaS 注册接口：
 
@@ -41,11 +40,11 @@ node --version
 API Key 按需配置：
 
 - 不涉及搜索的任务（简单通知、改写润色、只生成 Word 等）：不要求配置 API Key，可直接使用。
-- 需要搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）：此时若初始化结果显示 `api_key_configured=false` 或 `search_ready=false`，先引导用户完成 MaaS 注册获取 Key，并将 Key 写入环境变量 `DKNOWC_API_KEY`，再继续执行搜索。注册成功后无需重启：脚本在进程环境变量缺失时自动从 ~/.zshrc 读取 Key（部分宿主版本不再向会话注入 shell 环境变量，直读文件不受影响）。
+- 需要搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）：此时若初始化结果显示 `api_key_configured=false` 或 `search_ready=false`，先按 `reference/onboarding_scripts.md` 固定话术引导用户完成注册获取 Key。注册成功后无需重启：脚本在进程环境变量缺失时自动从 ~/.zshrc 读取 Key。
 
 ## 需要搜索时，注册并配置深知搜索 API Key
 
-只有当前任务需要深知搜索（政策依据、数据支撑、案例参考，或查最新政策、最新情况）时才需要配置 API Key。配置 API Key 后，深知公文写作可调用深知可信搜索，从权威文件库中检索政策依据、权威数据和典型案例，检索结果附原文来源，便于写作时引用和核验。不涉及搜索的写作任务无需配置 Key，可直接使用。向用户介绍搜索能力与开通引导话术时可参考 `reference/search_intro.md`；用户犹豫时可用 `reference/sample_search_result.md` 与 `reference/sample_trace_report.html` 展示检索结果和可信溯源报告的效果（示例数据，仅供展示）。
+只有当前任务需要深知搜索（政策依据、数据支撑、案例参考，或查最新政策、最新情况）时才需要配置 API Key。配置 API Key 后，深知公文写作可调用深知可信搜索，从权威文件库中检索政策依据、权威数据和典型案例，检索结果附原文来源，便于写作时引用和核验。不涉及搜索的写作任务无需配置 Key，可直接使用。引导与注册各环节的固定话术（含报错处理）见 `reference/onboarding_scripts.md`；向用户介绍搜索能力可参考 `reference/search_intro.md`，用户犹豫时可用 `reference/sample_search_result.md` 与 `reference/sample_trace_report.html` 展示效果（示例数据，仅供展示）。
 
 skills.sh 版默认使用：
 
@@ -59,7 +58,7 @@ skills.sh 版默认使用：
 node scripts/register.mjs send --phone 13812345678
 ```
 
-返回 `status=true` 后，暂停并请用户提供收到的 6 位验证码。
+返回 `status=true` 后，转述脚本输出的 `user_message`（含脱敏手机号与"最新一条"提示），暂停并请用户提供收到的 6 位验证码。
 
 第 2 步，注册并获取 API Key：
 
@@ -67,7 +66,7 @@ node scripts/register.mjs send --phone 13812345678
 node scripts/register.mjs register --phone 13812345678 --vcode 123456 --organ 个人 --name 用户
 ```
 
-注册第二步会固定携带 `source="agent"`，并继续使用 skills.sh 渠道码。手机号已注册时，默认查回该账号已有可用 API Key；手机号未注册时，按 MaaS 注册流程创建账号并获取 API Key。成功后，脚本会把 API Key 写入 `~/.zshrc` 中的 `DKNOWC_API_KEY` 配置块，并返回 `envName=DKNOWC_API_KEY`、API Key 和写入状态。返回的完整 Key 仅供 Agent 当前任务临时注入环境变量使用，不得向用户展示完整 API Key，不得要求用户手动复制 Key。
+注册第二步会固定携带 `source="agent"`，并继续使用 skills.sh 渠道码。手机号已注册时，默认查回该账号已有可用 API Key；手机号未注册时，按 MaaS 注册流程创建账号并获取 API Key。成功后，脚本会把 API Key 写入 `~/.zshrc` 中的 `DKNOWC_API_KEY` 配置块，并返回 `user_message`（含 300 次免费额度与实名认证赠金告知，Agent 必须转述）。返回的完整 Key 仅供 Agent 当前任务临时注入环境变量使用，不得向用户展示完整 API Key，不得要求用户手动复制 Key。
 
 默认不重新生成 API Key。只有用户明确要求重新生成或新建 Key 时，才追加 `--new-key`：
 
@@ -75,12 +74,10 @@ node scripts/register.mjs register --phone 13812345678 --vcode 123456 --organ �
 node scripts/register.mjs register --phone 13812345678 --vcode 123456 --organ 个人 --name 用户 --new-key
 ```
 
-`--new-key` 会先查回已有可用 Key，再调用 MaaS API Key 创建接口生成新 Key，并仅把新 Key 写入 `~/.zshrc` 中的环境变量 `DKNOWC_API_KEY`。如新 Key 创建失败，不会把旧 Key 当作新 Key 使用。
-
-如自动注册链路失败，可降级引导用户访问 MaaS 管理平台：
+如自动注册链路失败，可按脚本 `user_message` 降级引导用户访问 MaaS 平台：
 
 ```text
-https://platform.dknowc.cn/
+https://platform.dknowc.cn/auth/#/login
 ```
 
 搜索接口固定为：
@@ -93,7 +90,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.6.0`。
+当前 skills.sh Public 版基于 `3.6.1`。
 
 ## 常用测试
 
@@ -134,32 +131,8 @@ python3 scripts/dkag_search.py "人才服务政策" --area 某省 --purpose "核
 python3 scripts/merge_search_results.py result_gd.json result_bj.json --output merged.json
 ```
 
-可信溯源报告 HTML：
+溯源核验报告 HTML：
 
 ```bash
 python3 scripts/source_note_html.py official-docs/input/trace-report.json --output trace-report.html
 ```
-
-## Public 版说明
-
-- 本版本不内置 API Key。API Key 只对需要深知搜索的任务是前置条件；不涉及搜索的简单通知、改写润色、只生成 Word 等任务可直接使用。
-- 需要搜索时，用户可通过 Agent 调用 `scripts/register.mjs`，用手机号和验证码注册 MaaS 账号并获取统一 API Key。
-- 注册成功后，脚本会把 API Key 写入 `~/.zshrc` 中的环境变量 `DKNOWC_API_KEY`，用户不需要查看或手动配置 Key。
-- 写入后脚本可直接从 `~/.zshrc` 读取，无需重启宿主。
-- 公文范文大纲、深知搜索、素材分类、Word 生成、表格排版、HTML 可信溯源、红头 Word 和异常处理等功能逻辑与主干完整版一致。
-- 3.3.0 起将“素材来源说明”升级为“可信溯源报告”：报告包含完整正文、可点击来源角标、来源卡片和知识专库链接，便于核验正文依据。
-- 3.3.1 起 API Key 改为按需前置：搜索类任务需要 Key，纯写作任务无需配置即可使用；需要 Key 时会给用户说明搜索能力价值。
-- 3.3.2 起搜索能力价值说明统一外移到独立参考文件，供 Agent 按需引用；`SKILL.md` 主说明文档不再内置营销性话术。
-- 3.3.3 起搜索能力说明统一为客观功能描述，手机号验证引导改为中性表达，相关参考文件更名为 `reference/search_intro.md`。
-- 3.4.0 起文种标准文件统一改为英文命名，避免中文文件名在部分环境引起路径错乱；新增决定/决议/命令/公报/议案、说明/申请/公示/采购公告、方案/总结/讲话稿/制度/调研/可研/审查/AI 算力等 17 个文种标准文件；新增 `reference/fact_discipline.md` 事实克制规则、`reference/anti_ai_patterns.md` 反 AI 味检查规则和 `scripts/prose_lint.py` 语言质检脚本；`SKILL.md` 按参考资料表渐进式加载重构。
-- 3.4.1 起排版脚本自动将英文半角引号规范化为中文全角引号，并明确生成端必须直接使用全角引号；所有正式写作任务默认交付 Word，执行过搜索时另附 HTML 可信溯源报告。
-- 3.4.2 起新增本地个人记忆：个人素材库 `knowledge-base/`（经用户确认保存材料，按用途六类分类并打场景标签，写作前自动检索）与写作偏好 `config/writing_preferences.json`（内容/排版/表达三类习惯，按文种范围生效，用户偏好优先于默认标准）；二者均为本机私有状态，不随公开包分发。
-- 3.4.3 起注册渠道埋点：sendMessage 与 register 请求体统一固定携带 `channel` 字段（skills.sh 渠道码），用于注册行为渠道细分统计。
-- 3.4.4 起开通搜索的注册引导优化：先价值后验证（禁止开口就要手机号）、引导时机后移（搜索方案确认后再引导）、给出退路（拒绝时不纠缠，基于已有材料先写并标注"待补"）、交付后轻提示；`reference/search_intro.md` 重写为能力数据（600 万篇规范性文件 / 7000 万篇可溯源权威公开资料 / 每日更新 / 54 行业 300 地市 2800 县）+ 安全边界 + 四类分场景话术，新增 `reference/sample_search_result.md` 与 `reference/sample_trace_report.html` 效果示例。
-- 3.4.5 起新增多轮改稿工作流 `reference/revision_workflow.md`（以最新版 Word 为唯一底稿、意见拆解为结构/表达动作逐条落实并汇报、修改粒度对齐、默认复用搜索结果不重复检索、引用变化同步更新溯源 HTML、每轮交付 `_v1`/`_v2` 新版）；新增成稿快速自检（每次生成 Word 前默认执行 5 项：事实有据/结构完整/无占位残留/无 AI 味/格式合规，不合格先修正再交付）。
-- 3.4.6 起针对宿主环境（WorkBuddy 等）实测反馈优化：注册成功后立即告知额度与赠金信息（自带 300 次免费额度 + 到深知 MaaS 平台 `https://platform.dknowc.cn/` 实名认证可额外获赠 100 元体验金，不等额度用完才提）；搜索接口新增 `quota_exhausted` 余额不足识别（HTTP 402/403 或错误信息命中关键词时返回 `quota_exhausted=true`），命中后禁止任何形式的重试，立即引导用户到 MaaS 平台处理；新增 `scripts/deliver_outputs.py`，交付前自动探测宿主工作区（`--dest` > 环境变量 > WorkBuddy 最新时间戳工作区的 outputs/ > 当前目录）并把 Word 与可信溯源报告 HTML 复制过去，探测不到时返回 `need_dest=true` 要求补 `--dest`，解决产出物用户不可见的问题。
-- 3.5.0 起可信溯源报告升级为溯源核验报告：打开第一屏即展示核验报告单（依据溯源/引用绑定/时效检查/类型覆盖/成稿自检五项指标，全部由脚本真实计算，缺链接标待补、未绑定标红、自检未记录不装通过）；报告式布局（深色顶栏 + 正文分节卡片 + 右栏核验材料面板，删除聊天式问题气泡）；素材四分类色系与类型筛选；未引用素材分组、浏览器打印归档样式；溯源 JSON 新增 `self_check` 必填字段与 `materials[].type` 四分类枚举，文件名改为 `标题_溯源核验报告.html`。
-- 3.5.1 起 frontmatter category 改为 "office-efficiency"（平台"办公效率"类目 slug）：原中文值"通用办公"匹配不到平台类目枚举，疑似因此被算法按描述关键词归类到"内容创作"，本版验证 category 字段对平台分类的映射作用；功能与 3.5.0 完全一致。
-- 3.6.0 起溯源核验报告按会议反馈改版：报告名称统一为"溯源核验报告"并加眉头式身份章；核验单五项指标文案拟人化；材料卡展示接口原文标题链（"标题：一、… › …"）、摘录标注"原文原段（非 AI 生成）"、可信度为"高"的材料加"高可信"徽标；接口召回未引用的相关材料进入"未引用素材"分组（全量、不占角标编号）；多路检索按 `search_key` 生成筛选胶囊（单选+全部+未引用）；移动端点角标弹出"正文表述 ↔ 原文原段"对照弹层；超 4 行摘录折叠带"展开全文"引导。
-- 3.5.2 起修复外部公文专家测试反馈的格式问题：落款双段定位（单位右空两字、日期首字右移两字，日期长于署名时按 GB/T 9704—2012 第二分支定位）；联系人电话按行文方向规范位置（下行文入正文、上行文必须写、平行文可选）；字体表述仅在用户问到时用全称"仿宋_GB2312"回答、禁止简写"仿宋"（交付时不主动说明字体）；Word 正文与元数据均不保留 AI 生成提示，AI 标识仅由交付话术承担。版记自动生成功能经多方案实测后回退（docx 格式不含分页信息，自动版记在 Word/WPS 中的分页行为不可控）：普通 Word 不自动生成版记，需要版记时建议手工补充或改用红头文件（红头脚本生成国标版记）。API Key 读取兼容宿主环境变量隔离（WorkBuddy 5.5.3 疑似安全更新后不再向会话注入 shell 环境变量——新增 api_key.py 统一解析，环境变量缺失时自动读 ~/.zshrc，注册写入后即时生效、无需重启宿主）。
-- 如搜索失败或提示 API Key 未配置，请重新执行注册流程或检查环境变量 `DKNOWC_API_KEY` 是否存在且有效。

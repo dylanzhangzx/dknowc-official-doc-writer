@@ -7,12 +7,12 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并单独生成所有材料的溯源说明与原文清单，帮助用户写得有依据、能复核、可交付。正式交付时支持生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and generate a separate source-reference report. Final outputs can be generated as Word documents, and red-head document formatting is supported when explicitly requested by the user."
 category: "office-efficiency"
-version: "3.6.0"
+version: "3.6.1"
 author: "彩智科技"
 permissions:
   network:
     - "https://open.dknowc.cn/"
-    - "https://platform.dknowc.cn/"
+    - "https://platform.dknowc.cn/auth/#/login"
   local_read:
     - "本 Skill 的 reference、config、official-docs、knowledge-base 等规则、标准、配置、参考资料和个人素材库文件"
   local_write:
@@ -32,7 +32,7 @@ secrets:
 
 ## 权限说明
 
-本 Skill 会访问 `https://open.dknowc.cn/` 用于公文范文大纲、深知可信搜索和溯源核验报告整理；访问 `https://platform.dknowc.cn/` 用于 MaaS 手机号验证码注册、API Key 获取和管理平台地址说明。运行过程中会读取本 Skill 的规则、标准、配置和参考资料文件，并在本地写入初始化状态文件、用户授权保存的写作偏好、生成的 Word 文档、溯源核验报告和搜索结果中间文件。MaaS 注册取 Key 成功后，会把 `DKNOWC_API_KEY` 配置块写入本机 `~/.zshrc`；脚本读取顺序为进程环境变量优先、缺失时自动解析该文件。Skill 包内不包含真实 API Key，API Key 必须通过环境变量 `DKNOWC_API_KEY` 注入，不得硬编码，不得写入公开包，不得在对话中展示完整内容。
+本 Skill 会访问 `https://open.dknowc.cn/` 用于公文范文大纲、深知可信搜索和溯源核验报告整理；访问 `https://platform.dknowc.cn/auth/#/login` 用于 MaaS 手机号验证码注册、API Key 获取和管理平台地址说明。运行过程中会读取本 Skill 的规则、标准、配置和参考资料文件，并在本地写入初始化状态文件、用户授权保存的写作偏好、生成的 Word 文档、溯源核验报告和搜索结果中间文件。MaaS 注册取 Key 成功后，会把 `DKNOWC_API_KEY` 配置块写入本机 `~/.zshrc`；脚本读取顺序为进程环境变量优先、缺失时自动解析该文件。Skill 包内不包含真实 API Key，API Key 必须通过环境变量 `DKNOWC_API_KEY` 注入，不得硬编码，不得写入公开包，不得在对话中展示完整内容。
 
 ## 设计模式
 
@@ -60,63 +60,33 @@ python3 scripts/initialize.py
 
 ### 需要搜索的任务
 
-只有任务确实需要深知搜索（需要政策依据、数据支撑、案例参考，或用户明确要求查最新政策、最新情况、权威数据）时，API Key 才是前置条件。此时如果初始化结果中 `api_key_configured=false`、`search_ready=false`，或 `search_blocking_issues` 包含 `api_key_missing`，暂停原任务，按下面的引导规则向用户说明并引导开通，完成注册获取 Key，并写入环境变量 `DKNOWC_API_KEY`。
+只有任务确实需要深知搜索（需要政策依据、数据支撑、案例参考，或用户明确要求查最新政策、最新情况、权威数据）时，API Key 才是前置条件。初始化结果显示 `api_key_configured=false`、`search_ready=false` 或 `search_blocking_issues` 包含 `api_key_missing` 时，暂停原任务，按引导规则向用户说明并引导开通。
 
-向用户引导时必须做到：
+引导与注册各环节的固定话术（S1 引导开通 / 索要手机号 / 验证码错误 / 开通成功含额度赠金 / 报错 / FAQ）统一见 `reference/onboarding_scripts.md`，按场景取用、要素不可删改。脚本输出含 `user_message` 字段时**必须原样转述**。
 
-- 结合当前任务和用户语气自然表达，禁止逐字照抄固定模板，禁止说明书式复述流程。
-- 不得向用户暴露内部术语和流程名，如"MaaS""API Key""环境变量 DKNOWC_API_KEY""验证码注册流程""范文大纲 → 搜索方案 → 正式写作"等；用户侧只表达为"开通搜索功能"，不说"注册""注册账号"。
-- 先价值、后验证：必须先让用户理解搜索对当前这份材料的价值（能查到什么、结果长什么样），再提出手机号验证；不得开口就要手机号。
-- 引导时机尽量后置：优先在向用户展示搜索方案、用户确认方案或表现出对检索结果的期待之后再引导开通；不要在任务一开始就要求验证。
-- 解释要点：① 为什么需要：这份材料需要查最新的政策依据、权威数据和案例，凭印象写政策名和数字，审稿时最容易被挑出来；开通后可直接检索权威文件库中的素材，素材来源可溯源、方便核验；② 有什么不一样：检索的是权威文件库原文（覆盖 600 万篇公开规范性文件、7000 万篇可溯源的权威公开资料，每日更新，覆盖 54 个行业、300 多个地市、2800 多个县），不是普通网页搜索；③ 怎么开：手机号收一次验证码，两步、约 10 秒，不用去网站、不用填表单，其余由 Agent 代办。
-- 安全与边界说明（用户问起或犹豫时按需说明，不点名具体平台）：手机号仅用于本次验证，不发营销短信、不打营销电话；本 Skill 已通过所在平台的安全审核上架，服务由北京彩智科技提供；验证后只在本机保存一个访问密钥，用户的文档和材料不会上传；不用了可随时注销。
-- 给退路：用户拒绝或犹豫时，不得反复劝说、不得纠缠；直接基于用户已有材料继续写作，政策依据、数据支撑处使用醒目的"待补充依据"类占位标注，交付时提醒用户这些位置尚未经过权威核验；用户后续主动提出开通时再执行注册。
-- 交付后轻提示：未配置 API Key 的用户完成正式 Word 交付后，可自然带一句"以后写要引用政策文件的材料，可开通权威检索，每条依据带原文出处"；每个任务最多提示一次，不追问、不重复。
-- 如需向用户介绍深知搜索的能力说明、安全说明和分场景话术范例，参考 `reference/search_intro.md`；用户犹豫或询问检索效果时，可读取 `reference/sample_search_result.md` 和 `reference/sample_trace_report.html` 向用户展示检索结果和溯源核验报告的效果。两个示例文件均为示例数据，仅供展示，不得作为写作素材引用，不得发给用户当作交付物。所有说明用自己的话自然组织，不得整段照抄参考文件。
+硬规则：
 
-语气示范（不要照抄，模仿这种自然口吻组织语言）：
+- **引导前禁示**：在用户确认开通或明确拒绝之前，不得输出任何"已核实 / 已查到 / 均为官网原文"类政策内容。需要搜索的材料，政策依据只能来自真实深知检索或"待补"标注，禁止用模型自身知识冒充检索结果。
+- 先价值、后验证：先让用户理解搜索对当前材料的价值与开通权益（300 次免费额度 + 实名认证赠金，在 S1 一并告知），再提手机号；不得开口就要手机号。引导时机后置：优先在搜索方案确认后再引导。
+- 退路只有"标待补继续写"一种，禁止承诺"用联网检索替代、同样可溯源"。
+- 不向用户暴露内部术语（MaaS、API Key、环境变量名、脚本名、渠道码）；用户侧只说"开通搜索功能"。
+- 样例悬念式出示：引导后用户未立即同意或提出疑问 → 立即出示 `reference/sample_trace_report.html` 示例（示例数据仅供展示，不得作为写作素材）。
+- 用户拒绝后不纠缠；交付后轻提示每个任务最多一次。
+- 手机号全程脱敏显示。
 
-```text
-这份调研报告需要引用政策原文和权威数据，凭印象写政策名和数字，审稿时最容易被挑出来。开通搜索后，我可以直接检索权威文件库——覆盖 600 万篇公开规范性文件、7000 万篇可溯源的权威公开资料，每日更新，检索到的每条政策、数据都带原文出处，可点开核验，这是普通联网搜索做不到的。
-
-开通只需手机号收一次验证码：两步、10 秒左右，不用去网站、不用填表单，剩下的我来办。手机号仅用于本次验证，不会有营销骚扰。
-
-也可以先不开通：我基于你手头的材料先写，政策依据的位置先标注"待补"。
-```
-
-引导配置时，用户提供手机号和收到的验证码即可。注册和获取 Key 由 Agent 处理；获取到的 Key 必须写入本机 `~/.zshrc` 中的环境变量 `DKNOWC_API_KEY`。写入后无需重启宿主：初始化与搜索脚本在进程环境变量缺失时会自动从 ~/.zshrc 解析 DKNOWC_API_KEY（部分宿主版本不再向会话注入 shell 环境变量，脚本直读文件不受影响）。
-
-MaaS 初始化按两步流程执行：
+MaaS 注册两步执行（初始化输出 `guide_message` 已含引导话术）：
 
 ```bash
 node scripts/register.mjs send --phone <手机号>
 ```
 
-返回 `status=true` 后，暂停并向用户索取收到的 6 位验证码，不得自行编造验证码。
-
-拿到验证码后执行：
+成功后转述脚本 `user_message`（含脱敏号码与"最新一条"提示），等待用户提供 6 位验证码，不得自行编造。
 
 ```bash
 node scripts/register.mjs register --phone <手机号> --vcode <验证码> --organ 个人 --name 用户
 ```
 
-脚本默认固定 `type=6`（深知可信搜索），自动使用 skills.sh 渠道码 `8C8D411C-6A46-4E99-887D-87D9A1329930`，并固定携带 `source="agent"`。手机号已注册时，脚本默认查回该账号已有可用 API Key；手机号未注册时，按 MaaS 注册流程创建账号并获取 API Key。成功后，脚本会把 API Key 写入 `~/.zshrc` 中的 `DKNOWC_API_KEY` 配置块，并返回环境变量名、API Key 和写入状态，仅供 Agent 当前任务临时注入环境变量使用。不得向用户展示完整 API Key，不得要求用户手动复制 API Key。当前任务应使用脚本返回的 Key 重新运行初始化检查；确认通过后继续处理用户原任务。脚本读取 Key 的顺序：进程环境变量优先，缺失时自动解析 ~/.zshrc 中的 DKNOWC_API_KEY，无需重启宿主。
-
-注册成功后必须随即告知用户额度与赠金信息：开通自带 300 次免费体验额度；另外到深知 MaaS 官网 `https://platform.dknowc.cn/` 完成实名认证，可额外获赠 100 元体验金（以平台页面展示为准），建议顺手完成——不要等额度用完才提。后续搜索返回 `quota_exhausted=true`（额度或余额用尽）时，按"搜索异常处理"立即停止重试并引导用户到该地址处理。
-
-默认不得重新生成 API Key。只有用户明确要求“重新生成 Key”“新建一个 Key”“不要用旧 Key”等表达时，才在上述注册命令后追加 `--new-key`：
-
-```bash
-node scripts/register.mjs register --phone <手机号> --vcode <验证码> --organ 个人 --name 用户 --new-key
-```
-
-`--new-key` 会先通过手机号验证码和 `source="agent"` 查回一把已有可用 Key，再调用 MaaS API Key 创建接口生成新 Key，并仅把新 Key 写入 `~/.zshrc` 中的环境变量 `DKNOWC_API_KEY`。如新 Key 创建失败，必须暂停并说明错误，不得把旧 Key 当作新 Key 使用。
-
-如接口失败、短信发送受限、验证码错误、`source` 未被接口接受或用户不希望自动注册，暂停原任务并给出 MaaS 管理平台地址作为降级方案：
-
-```text
-https://platform.dknowc.cn/
-```
+成功后转述脚本 `user_message`（额度到账轻确认；`existed=true` 时为老用户找回话术）；用返回的 Key 重跑初始化确认后继续原任务。不得向用户展示完整 Key。默认不重新生成 Key，仅用户明确要求时追加 `--new-key`。注册失败按脚本 `user_message` 处理；连续失败降级引导 `https://platform.dknowc.cn/auth/#/login`。
 
 ## 参考资料（渐进式读取）
 
@@ -126,6 +96,7 @@ https://platform.dknowc.cn/
 | --- | --- | --- |
 | `reference/task_router.md` | 任务开始 | 判断任务类型与复杂度，所有任务先读 |
 | `reference/revision_workflow.md` | 改稿轮 | 用户基于已交付 Word 提修改意见的连续改稿 |
+| `reference/local_memory_guide.md` | 素材/偏好管理时 | 素材库或偏好数量大于 0，或用户要求保存/查看/删除素材与偏好时 |
 | `reference/fact_discipline.md` | 起草/改稿前 | 所有正式写作任务，约束事实边界 |
 | `reference/anti_ai_patterns.md` | 定稿前/审查 | 正式正文语言复核、去 AI 味、审查模式 |
 | `scripts/prose_lint.py` | 定稿前 | 检查草稿语言、格式、重复风险（可选） |
@@ -136,6 +107,7 @@ https://platform.dknowc.cn/
 | `reference/material_usage_guidance.md` | 执行搜索后 | 召回素材如何进入正文 |
 | `reference/output_guide.md` | 生成 Word 前 | 正文 Markdown 格式、Word 交付 |
 | `reference/review_checklist.md` | 生成前后 | 按任务风险执行审查时 |
+| `reference/onboarding_scripts.md` | 引导开通/注册/报错时 | 需要引导开通搜索、注册流程任一步、或注册与搜索接口报错沟通时 |
 | `reference/search_intro.md` | 引导用户时 | 需要向用户说明搜索功能时 |
 | `reference/sample_search_result.md` | 引导用户时 | 用户对检索效果有疑问或犹豫，需展示检索结果形态 |
 | `reference/sample_trace_report.html` | 引导用户时 | 需要向用户展示溯源核验报告效果 |
@@ -143,64 +115,20 @@ https://platform.dknowc.cn/
 
 ## 个人素材库与写作偏好
 
-本 Skill 在本机维护两类个人状态，均只对当前用户生效、不随公开包分发、不上传：个人素材库 `knowledge-base/` 和写作偏好 `config/writing_preferences.json`。初始化结果的 `local_memory` 字段返回二者数量；数量大于 0 时，写作任务应先检索素材库并应用偏好。
+本 Skill 在本机维护个人素材库 `knowledge-base/` 与写作偏好 `config/writing_preferences.json`，均只对当前用户生效、不随公开包分发、不上传。初始化结果 `local_memory` 字段返回二者数量；数量大于 0 时，写作任务应先检索素材库并应用偏好。
 
-### 个人素材库（knowledge-base/）
+- 保存或删除素材/偏好必须先经用户确认；一次性使用的内容不保存。
+- 素材库命中的材料按用户提供的材料对待（与当轮材料同优先级，高于搜索素材），仍须遵守 `reference/fact_discipline.md` 事实边界。
+- 用户明示的写作偏好优先于文种标准和默认排版（红头国标强制项除外，冲突时向用户说明）；与当轮要求冲突时当轮优先。
 
-用户提供的材料（单位资料、政策文件、数据资料、历史文稿、业务口径等）默认只在当轮使用、不留存。以下情况才存入素材库：
-
-- 用户明确说"存下来""记住这份材料""加到素材库"等 → 直接保存。
-- Agent 判断材料有长期复用价值（单位基本信息、常用政策依据、历史成稿、内部业务口径），主动建议保存并说明用途 → 用户确认后保存。
-
-未经用户确认，不得擅自把材料写入素材库；一次性使用的内容（单次任务草稿、临时改稿素材）不保存。
-
-保存与检索命令：
-
-```bash
-python3 scripts/local_memory.py kb save <文件> --category <分类> --tags <场景标签> --note <备注> [--title <标题>]
-python3 scripts/local_memory.py kb list [--category <分类>] [--tag <标签>]
-python3 scripts/local_memory.py kb search <关键词> [--category <分类>]
-python3 scripts/local_memory.py kb remove <素材ID>    # 必须先经用户确认
-```
-
-分类固定六类：`unit-profile`（单位资料）、`policy`（政策文件）、`data`（数据资料）、`past-docs`（历史文稿）、`business-rules`（业务口径）、`misc`（其他）；场景标签按写作场景打（如：通知、请示、总结、汇报材料）。
-
-素材使用规则：
-
-- 正式写作需要材料支撑时，先检索素材库，命中后读取对应文件作为用户材料使用，优先级与用户当轮提供的材料相同，高于搜索素材。
-- 素材库材料是用户私有材料，其中的单位名称、数据、口径按用户提供材料对待，可直接使用；但仍须按 `reference/fact_discipline.md` 保持状态强度，不得过度推断。
-- 素材库不足或未命中时，再按搜索规则进入深知搜索流程，不得把素材库检索替代必要的政策核验。
-- 删除素材必须先向用户确认。
-
-### 写作偏好（writing_preferences.json）
-
-用户在写作过程中表达的重复性习惯，经确认后沉淀为偏好，分三类：
-
-- `content`（内容习惯）：如"总结里要写党建部分""问题分析不超过三条"。
-- `format`（排版习惯）：如"标题不用问句""落款日期用中文数字"。
-- `phrasing`（表达习惯）：如"不用'赋能''抓手'这类词""称呼统一用'贵单位'"。
-
-沉淀时机：用户明确说"以后都这样写""记住这个习惯"→ 直接保存；用户在某次修改中纠正了 Agent 的写法且该纠正具有一般性 → Agent 主动询问"是否把这条作为你的常用写作偏好"，确认后保存。
-
-```bash
-python3 scripts/local_memory.py pref save --type <content|format|phrasing> --scope <通用或文种> --rule <偏好内容> [--source <来源>]
-python3 scripts/local_memory.py pref list [--type <类型>] [--scope <范围>]
-python3 scripts/local_memory.py pref remove <偏好ID>    # 必须先经用户确认
-```
-
-应用规则：
-
-- 每次正式写作前，若偏好数量大于 0，先读取全部偏好；`scope` 命中当前文种或为"通用"的偏好均生效。
-- 用户明示的写作偏好优先于文种标准和默认排版；仅红头文件的国标版记位置等强制国标要求例外，冲突时向用户说明。
-- 偏好不得与用户当轮要求冲突：当轮要求优先。用户明确否定某条偏好时，应建议删除该条。
-- 删除偏好必须先经用户确认。
+命令与完整规则（六类分类、沉淀时机、应用范围）见 `reference/local_memory_guide.md`。
 
 ## 工作原则
 
 - 首次使用时先运行 `python3 scripts/initialize.py` 检查 Python、依赖和 `DKNOWC_API_KEY` 环境变量配置。初始化不要求用户提供单位或个人信息，也不上传检测结果。
 - Python 和 `python-docx`、`requests` 依赖属于基础前置条件：如无法运行 `python3`，或初始化结果显示 `python_docx=false`、`requests=false`，必须暂停执行 Skill 的写作、搜索、Word、红头和溯源核验报告能力。
 - API Key 属于按需前置条件：只有当前任务需要深知搜索（政策依据、数据支撑、案例参考、查最新政策情况）时，才要求 `api_key_configured=true`、`search_ready=true`。不需要搜索的简单通知、改写、润色、基于用户材料写作或只生成 Word 的任务，即使 `api_key_configured=false`、`search_ready=false` 也不阻断，直接按原任务流程继续。
-- 发现 `python-docx` 或 `requests` 缺失且 `dependency_install_prompt_needed=true` 时，可以先向用户说明影响，并征得用户同意后执行 `python3 -m pip install python-docx requests`；未经用户同意不得自行安装依赖。安装后必须重新运行 `python3 scripts/initialize.py` 确认 `ready=true` 后再继续。如用户不同意安装依赖，执行 `python3 scripts/initialize.py --decline-dependency-install` 记录拒绝状态，后续不再反复询问，但仍因缺少必备依赖而暂停相关能力。
+- 发现依赖缺失且 `dependency_install_prompt_needed=true` 时（initialize 会同时输出统一的 `env_message` 话术），按 `reference/onboarding_scripts.md` S6 向用户说明——不出现 python-docx/requests 等组件名，就绪时不向用户提任何环境话题；征得用户同意后执行 `python3 -m pip install python-docx requests`；未经用户同意不得自行安装依赖。安装后必须重新运行 `python3 scripts/initialize.py` 确认 `ready=true` 后再继续。如用户不同意安装依赖，执行 `python3 scripts/initialize.py --decline-dependency-install` 记录拒绝状态，后续不再反复询问，但仍因缺少必备依赖而暂停相关能力。
 - 如缺少 Python 或当前环境无权限安装依赖，应提示用户切换到具备 Python 的 Agent/运行环境，或由用户/平台管理员先完成 Python 与依赖安装。
 - 字体不作为 Skill 初始化阻断项，也不主动检测、安装或引导用户安装字体。Word 文档会写入公文常用字体名称；交付时简单提醒用户：如打开端缺少对应字体，Word/WPS 可能自动替换，需以本机打开后的显示为准。
 - 仅在用户明确同意保存常用设置时，使用 `--save` 写入本机 `config/user_profile.json`；不得主动索取与当前公文无关的信息。
@@ -221,11 +149,11 @@ python3 scripts/local_memory.py pref remove <偏好ID>    # 必须先经用户�
 - 只有用户明确说“直接在对话里给正文”“不要生成 Word”“先看文字草稿”时，才在聊天中输出正文全文。
 - 正式写作任务不得先在对话中发送“正文初稿”“压缩版”“预览版”或完整正文；应直接生成 Word，只给简短说明和文件路径。
 - 正式公文 Word 默认保持纯净：正文中不得附带来源角标、`【素材使用情况】`、`【知识专库链接】` 或长 URL；执行过搜索时，可信溯源信息单独生成 HTML 辅助交付物。
-- Word 正文不内嵌 AI 生成提示，docx 属性元数据同样不写入——本 Skill 的定位是经可信核验的可交付成稿，文件内任何位置都不保留 AI 提示痕迹。AI 生成标识仅由交付时的话术承担：必须在对话中说明一句（自然口吻，不逐字照抄）：本稿由 AI 辅助生成、依据已经过可信核验，建议按单位审签流程核批后正式行文。排版脚本会过滤正文输入中误带的旧版提示行，红头脚本仍会自动移除存量稿件正文中的旧版 AI 提示行。
+- Word 正文不内嵌 AI 生成提示，docx 属性元数据同样不写入。AI 生成标识仅由交付话术承担：在对话中自然说明一句——本稿由 AI 辅助生成、依据已经过可信核验，建议按单位审签流程核批后正式行文。排版脚本会自动过滤正文输入中误带的提示行。
 
 字体表述规范：交付时不主动说明字体（格式规范已内置，无需赘述）；仅在用户问到字体或对字体有疑问时回答，且一律写全称"仿宋_GB2312（公文标准字体）"，禁止简写"仿宋"——两者是字体库中的不同字体，简写会误导用户。
 
-版记：普通 Word 不自动生成版记（docx 格式不含分页信息，自动版记的分页行为在 Word/WPS 中不可控，实测会出现版记单独成页或推挤落款翻页）；用户明确要求版记时，如实说明该限制，建议由用户在 Word 中于落款之后手工补充，或改用红头文件（红头脚本生成国标版记）。正文中的"抄送：××机关。"行按普通正文段落排版。
+版记：普通 Word 不自动生成版记（自动分页行为不可控）；用户明确要求版记时，建议由用户在 Word 中于落款之后手工补充，或改用红头文件（红头脚本生成国标版记）。正文中的"抄送：××机关。"行按普通正文段落排版。
 
 落款与联系人（按行文方向）：落款单位右空两字、成文日期首字在单位首字右移两字处，均由脚本自动处理；联系人电话写入正文相关事项段，不得独立成结尾最后一段——上行文必须写明，平行文可用可不用，下行文不作强制要求（详见各文种标准）。
 - Markdown 草稿只能作为生成 Word 的内部临时文件；不得向用户展示、链接、发送或要求用户审阅 `.md` 草稿。
@@ -264,19 +192,9 @@ python3 scripts/outline_reference.py "用户写作需求" --output outline_任�
 
 未指定目录的范文大纲结果保存到 `official-docs/outline-results/`。调用时使用环境变量 `DKNOWC_API_KEY`，不得向用户展示 API Key、接口参数或内部保存路径。脚本输出中 `request_success` 只表示接口请求成功，是否有可用大纲必须看 `outline_available`；`outline_available=false` 时，直接忽略范文大纲能力，不向用户确认大纲，也不要让模型自行生成替代大纲。
 
-触发范围：
+触发范围：起草、撰写正式公文或事务文书（报告、总结、计划、方案、汇报材料、讲话稿、调研分析、政策研究等长篇材料），以及用户明确要求"先给大纲""参考范文结构"。可跳过：简单会议通知、时间地点变更、短告知短提醒、用户提供完整大纲要求严格照写、或明确要求直接输出短正文。
 
-- 起草、撰写、生成正式公文或事务文书
-- 报告、总结、计划、方案、汇报材料、讲话稿、发言材料、经验交流材料、调研分析、政策研究等长篇材料
-- 用户明确要求“先给大纲”“参考范文结构”“设计写作框架”
-
-可跳过范围：
-
-- 简单会议通知、时间地点变更、短告知、短提醒
-- 用户明确要求直接输出短正文，且无需政策、数据、案例或复杂结构
-- 用户提供完整大纲并要求严格按其大纲写作
-
-范文大纲接口同样使用 `DKNOWC_API_KEY`。任务不需要搜索且未配置 Key 时，直接跳过范文大纲，按文种标准写作，不引导用户配置 Key；任务需要搜索时，按“启动初始化”先确保 API Key 已配置，再调用范文大纲接口。
+范文大纲接口同样使用 `DKNOWC_API_KEY`。任务不需要搜索且未配置 Key 时，直接跳过范文大纲，按文种标准写作，不引导用户配置 Key；任务需要搜索时，按"启动初始化"先确保 API Key 已配置，再调用范文大纲接口。任务需要搜索时，按“启动初始化”先确保 API Key 已配置，再调用范文大纲接口。
 
 大纲接口返回可用结果时，向用户展示：
 
@@ -284,44 +202,7 @@ python3 scripts/outline_reference.py "用户写作需求" --output outline_任�
 - 建议大纲，每个一级标题附简短写作目的和要点
 - 后续搜索建议，只展示检索方向和用途，不展示脚本参数
 
-用户可见确认内容必须使用清晰的 Markdown 分节和列表，不得把大纲、写作要点和搜索建议压缩成一个长段落，也不得只给“确认执行/调整后执行”而不展示可读结构。推荐格式：
-
-```text
-我先根据范文库生成了参考大纲和后续搜索建议，请确认是否按这个结构继续，或告诉我需要调整哪些部分。
-
-建议大纲：
-
-一、发展背景与战略意义
-- 写作目的：……
-- 主要要点：
-  - ……
-  - ……
-
-二、主要做法与推进路径
-- 写作目的：……
-- 主要要点：
-  - ……
-
-后续搜索建议：
-
-1. 政策依据
-- 检索方向：……
-- 用途：……
-
-2. 数据支撑
-- 检索方向：……
-- 用途：……
-
-3. 参考案例
-- 检索方向：……
-- 用途：……
-```
-
-确认话术：
-
-```text
-我先根据范文库生成了一个参考大纲和后续搜索建议，请确认是否按这个结构继续，或告诉我需要调整哪些部分。确认后我再进入政策、数据和案例检索。
-```
+用户可见确认内容必须使用清晰的 Markdown 分节和列表，不得压缩成一个长段落；展示格式与确认话术模板见 `reference/search_guide.md` 第一节。
 
 用户确认或修改后，再进入深知搜索方案设计。大纲接口返回的 `search_suggestions` 只能作为搜索方案设计输入，必须转化为用户可理解的搜索项后再次确认；不得直接当作已经检索到的素材。
 
@@ -355,25 +236,16 @@ python3 scripts/outline_reference.py "用户写作需求" --output outline_任�
 搜索异常处理：
 
 - 如搜索脚本返回 `error=true`、接口异常、网络异常、权限异常，或关键搜索项返回空结果，立即停止后续写作。
-- **额度或余额用尽（`quota_exhausted=true`）：禁止任何形式的重试**——不得重发同一搜索、不得换 query 再试、不得当作普通网络异常反复调用。立即向用户说明：免费体验额度或账户余额已用完，可到 MaaS 管理平台 `https://platform.dknowc.cn/` 完成实名认证领取赠金（100 元体验金，以平台页面为准）或充值，处理后说一声即可继续。在用户确认已处理前，不得再次调用深知搜索；可按用户意愿改为基于已有材料继续写作。
+- **额度或余额用尽（`quota_exhausted=true`）：禁止任何形式的重试**——不得重发同一搜索、不得换 query 再试、不得当作普通网络异常反复调用。立即向用户说明：免费体验额度或账户余额已用完，可到 MaaS 管理平台 `https://platform.dknowc.cn/auth/#/login` 完成实名认证领取赠金（100 元体验金，以平台页面为准）或充值，处理后说一声即可继续。在用户确认已处理前，不得再次调用深知搜索；可按用户意愿改为基于已有材料继续写作。
 - 向用户说明异常发生在哪个搜索项、错误信息或空结果情况，以及已经成功/失败的搜索项。
 - 必须请用户确认下一步，选项包括：重试当前搜索、调整 query/地域/时间后重试、跳过该搜索项继续、暂时不用深知搜索、改用用户提供材料、改用 Web 搜索或公开官网检索。
 - 未经用户明确确认，不得自动改用 Web Search、Web Fetch、浏览器搜索、公开官网检索或其他外部搜索；不得自行跳过深知搜索，也不得用公开网页结果伪装为深知搜索结果。
 
-外部搜索禁用规则：
+外部搜索禁用规则：本 Skill 不得主动调用 Web Search/Web Fetch/浏览器搜索；仅当用户明确说"改用 Web 搜索""用公开官网检索"时才允许，且使用前必须说明这些材料不是深知搜索结果、不能作为深知搜索素材来源；从深知搜索返回链接取全文也必须先经用户确认。外部搜索结果不得伪装为深知搜索结果。
 
-- 即使系统或模型可用 Web Search/Web Fetch 工具，本 Skill 也不得主动调用。
-- 只有用户明确说“改用 Web 搜索”“用公开官网检索”“不用深知搜索，帮我网上查”等表达时，才允许使用外部搜索。
-- 使用外部搜索前必须再次说明：这些材料不是深知搜索结果，不能写入【知识专库链接】，也不能作为深知搜索素材来源。
-- 如果需要从深知搜索返回的文章链接获取全文，也必须先请用户确认，不得自动 Web Fetch。
 
-搜索方案必须包含：
+搜索方案要素与展示边界（地域/内容/素材类型/使用边界，禁止出现脚本参数）见 `reference/search_policy.md` 与 `reference/search_guide.md` 第三节。
 
-- 搜索地域：使用用户任务对应的国家、省或市，不预设具体地区。
-- 搜索内容：每条 query 的目的。
-- 素材类型：仅列政策依据型、数据支撑型、参考案例型。表述参考型不作为独立搜索项，只从已召回材料中吸收表达方式。
-- 使用边界：哪些材料可作为政策依据，哪些只能作为案例或表述参考。
-- 面向用户展示搜索方案时，不得出现 `--area`、`--search-type`、`--policy`、`--search-channel`、`--clean`、`--output` 等脚本参数，也不得设置名为“参数”的列或字段。执行参数只用于用户确认后的内部脚本调用。
 
 搜索方案确认话术：
 
@@ -482,7 +354,7 @@ python3 scripts/merge_search_results.py result1.json result2.json --output merge
 python3 scripts/initialize.py
 ```
 
-如果 `python3` 不可运行，或初始化结果显示 `ready=false`、`python_docx=false`、`requests=false`，必须先暂停，不得继续执行本 Skill 的搜索、写作、Word、红头和溯源核验报告 HTML 生成。缺失 `python-docx` 或 `requests` 时，先请用户确认是否允许安装。API Key 只在任务需要深知搜索时才要求：不需要搜索的任务（简单通知、改写、润色、只生成 Word）即使 `api_key_configured=false`、`search_ready=false` 也可正常生成 Word；需要搜索的任务缺少有效 API Key 时，按“启动初始化”中的 MaaS 注册和环境变量配置流程处理。
+如果 `python3` 不可运行，或初始化结果显示 `ready=false`、`python_docx=false`、`requests=false`，必须先暂停（依赖缺失处理见"工作原则"）。API Key 按需前置：不需要搜索的任务即使未配置 Key 也可正常生成 Word；需要搜索的任务按"启动初始化"的注册流程处理。
 
 用户明确授权保存常用设置时，才执行：
 
@@ -512,19 +384,7 @@ python3 scripts/template_generator.py 通知 --input 普通Word文件路径 --or
 
 生成成功后，优先返回正式 `.docx` 文件路径和一句简短说明。执行过搜索并生成溯源核验报告 HTML 时，可同时返回辅助文件路径，但必须明确主文件是正式成稿、溯源核验报告不是正文附件。不要发送 Markdown 草稿、正文初稿、完整正文或中间文件路径。
 
-**宿主环境交付（WorkBuddy 等）：** 产出物默认落在 skill 安装目录的 `official-docs/output/`，宿主通常只向用户展示其工作区目录的文件，用户可能因此"看不到产出"。**每次交付前一律执行**（不要自行判断是否宿主环境——宿主执行 skill 脚本时当前目录常在 skill 目录内，肉眼判断不可靠）：
-
-```bash
-python3 scripts/deliver_outputs.py <产出物路径...> [--dest <宿主工作区目录>]
-```
-
-脚本按优先级自动探测宿主工作区（`--dest` 显式指定 > 宿主环境变量 > WorkBuddy 最新时间戳工作区 `~/WorkBuddy/` 的 `outputs/` 子目录 > 当前目录），把本次 Word（及溯源 HTML）复制过去并返回用户可见路径。**向用户展示的是脚本返回的 delivered 路径**，不是 skill 内部路径。未传文件参数时脚本自动复制 output 目录最近 10 分钟内新生成的文件。
-
-执行后按返回 JSON 处理：
-
-- `copied=true`：核对 `dest` 确实是当前任务工作区后，向用户展示 delivered 路径；`dest` 不对时用 `--dest <正确工作区>` 重跑。
-- `need_dest=true`：未能自动确定宿主工作区，必须用 `--dest <宿主工作区目录>` 重跑本脚本；在此之前不得把 skill 内部路径当作交付路径发给用户。
-- 任何情况下脚本都不会把文件复制到 skill 安装目录自身；不要手工把产出物复制到 skill 目录。
+**宿主环境交付（WorkBuddy 等）：** 产出物默认落在 skill 安装目录，宿主通常只展示其工作区文件。**每次交付前一律执行 `python3 scripts/deliver_outputs.py <产出物路径...>`**（不要自行判断是否宿主环境，判断不可靠），按返回 JSON 处理：`copied=true` 向用户展示 delivered 路径；`need_dest=true` 必须补 `--dest <宿主工作区>` 重跑，此前不得把 skill 内部路径当交付路径发给用户。
 
 如需先把正文落为临时 Markdown 文件供脚本读取，必须在同一工作流中继续生成 `.docx`；不得停在 Markdown 草稿，也不得把 Markdown 文件作为阶段性成果发给用户。只有用户明确要求“先看草稿”“先发 Markdown”“不要生成 Word”时，才可以交付 Markdown 或正文预览。
 
