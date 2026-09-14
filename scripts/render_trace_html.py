@@ -441,13 +441,16 @@ def compute_verification(answer: str, sources: List[Dict[str, str]], payload: Di
     """核验报告单数据。只计算脚本真实可得的结果，不虚构通过。"""
     generated_at = generated_at or datetime.now()
 
-    # ① 依据溯源：摘录可比对 + 原文链接/知识专库可回看。
+    # ① 依据溯源：摘录可比对 + 原文链接可回看。
     # 只统计被正文引用的材料——未引用召回材料未进入正文核验流程，其缺链在自身卡片上如实标注，
     # 不应拖累"正文依据可交付"的报告级结论。
+    # 缺原文链接（接口对部分治理库文章不返回源网址，属数据源覆盖问题而非核验工作缺失）
+    # 不再拖垮整体结论——报告的正常结论即为"核验完成"，缺链在指标行黄色提醒并在卡片标注；
+    # 缺摘录（正文依据无可比对的原文）仍视为核验问题计入未通过。
     cited_sources = [s for s in sources if s.get("used", True)]
     missing_links = [s["title"] for s in cited_sources if not s.get("has_link")]
     missing_excerpts = [s["title"] for s in cited_sources if not (s.get("excerpt") or "").strip()]
-    trace_passed = len(cited_sources) - len(set(missing_links) | set(missing_excerpts))
+    trace_passed = len(cited_sources) - len(missing_excerpts)
 
     # ② 引用绑定：正文角标与来源卡一一对应（按角标出现次数计，与用户在正文中数到的一致）
     cited = citation_ids(answer)
@@ -490,7 +493,7 @@ def compute_verification(answer: str, sources: List[Dict[str, str]], payload: Di
     # 政策效力：无法自动判定现行效力，列出建议人工复核
     policy_count = coverage.get("policy", 0)
 
-    trace_ok = cited_sources and trace_passed == len(cited_sources)
+    trace_ok = cited_sources and not missing_excerpts
     binding_ok = (not unbound) and not no_citation
     overall_passed = trace_ok and binding_ok
 
@@ -499,8 +502,6 @@ def compute_verification(answer: str, sources: List[Dict[str, str]], payload: Di
         reasons.append("没有找到来源材料")
     if no_citation:
         reasons.append("正文里没有来源角标，对不上材料")
-    if missing_links:
-        reasons.append(f"{len(missing_links)} 条素材待补原文链接")
     if unbound:
         reasons.append(f"有 {len(unbound)} 处角标找不到对应材料")
     if self_check["status"] == "fail":
@@ -731,11 +732,15 @@ def render_verify_panel(v: Dict[str, Any]) -> str:
         tr_html = ('<div class="vi"><span class="s fail">✗ 依据溯源 0/0</span>'
                    '<span class="d">未识别到来源材料</span></div>')
     elif tr["passed"] == tr["total"]:
-        tr_html = (f'<div class="vi"><span class="s ok">✓ 依据溯源 {tr["passed"]}/{tr["total"]}</span>'
-                   f'<span class="d">每条素材可回看原文</span></div>')
+        if missing_link_count := len(tr.get("missing_links") or []):
+            tr_html = (f'<div class="vi"><span class="s ok">✓ 依据溯源 {tr["passed"]}/{tr["total"]}</span>'
+                       f'<span class="d">每条素材摘录可比对；{missing_link_count} 条原文链接待接口补充（见材料卡标注）</span></div>')
+        else:
+            tr_html = (f'<div class="vi"><span class="s ok">✓ 依据溯源 {tr["passed"]}/{tr["total"]}</span>'
+                       f'<span class="d">每条素材可回看原文</span></div>')
     else:
         tr_html = (f'<div class="vi"><span class="s warn">◐ 依据溯源 {tr["passed"]}/{tr["total"]}</span>'
-                   f'<span class="d">{tr["total"] - tr["passed"]} 条待补原文链接或摘录</span></div>')
+                   f'<span class="d">待补摘录 {len(tr.get("missing_excerpts") or [])} 条</span></div>')
 
     bd = v["binding"]
     if bd.get("no_citation"):
