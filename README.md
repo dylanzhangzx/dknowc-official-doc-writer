@@ -90,7 +90,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.6.1`。
+当前 skills.sh Public 版基于 `3.6.2`。
 
 ## 常用测试
 
