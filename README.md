@@ -11,7 +11,7 @@
 - 任务路由：`reference/task_router.md` 定义简单任务、常规任务、复杂任务和高风险任务的处理方式。
 - 质量审查：`reference/review_checklist.md` 定义公文内容、可信溯源、文种专项和 Word 输出检查项。
 - Word 排版：通过 `scripts/format_document.py` 生成普通格式 `.docx`，支持标准 Markdown 表格和宽表横向页面。
-- 溯源核验报告：执行过搜索时，通过 `scripts/source_note_html.py` 和 `scripts/render_trace_html.py` 生成独立 HTML 溯源核验报告（含原文标题链、原文原段标注、高可信标识、未引用召回与检索筛选）。
+- 溯源核验报告：执行过搜索时，通过 `scripts/source_note_html.py` 和 `scripts/render_trace_html.py` 生成独立 HTML 溯源核验报告（句后引文胶囊、材料专库分组视图、章节引用徽章；生成时自动检测原文链接可达性并支持存档快照兜底）。
 - 已有 Word 审查：通过 `scripts/review_document.py` 只读提取已有 `.docx` 的格式信息和待核验事实表述。
 - 红头文件：通过 `scripts/template_generator.py` 代码化生成红头和表尾，不依赖 `templates/` 中的 Word 模板。
 - 个人素材库与写作偏好：`scripts/local_memory.py` 管理本机私有素材库与偏好（不随公开包分发）。
@@ -90,7 +90,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.6.2`。
+当前 skills.sh Public 版基于 `3.7.0`。
 
 ## 常用测试
 
