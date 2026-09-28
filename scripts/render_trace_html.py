@@ -10,7 +10,7 @@
 - 核验报告视图（默认）：核验报告单 + 正文分节卡；角标点击跳材料专库定位
 - 材料专库视图（全屏）：大搜索 + 热词（标题/正文高频词真实计算）+ 检索分组 tabs + 材料卡
 三个核验层次：报告级（核验报告单）／材料级（来源卡核验链标记）／引用级（角标一一绑定）。
-诚实原则：脚本真实计算的结果才打勾；政策现行效力等无法自动判定项归入"建议人工复核"。
+诚实原则：脚本真实计算的结果才打勾；无法自动判定的项不虚构展示（"现行效力"人工复核提示行已按产品要求移除，2026-09-19）。
 布局为单文件静态 HTML；打印归档模式单栏全展开并附材料附录。
 """
 
@@ -416,8 +416,10 @@ def classify_check_value(raw: Any) -> Tuple[str, str]:
     """把自检项的值解析为（状态, 核验说明）。
 
     兼容多种写法：`pass` / `true` / `通过` / `通过：说明文字` / `✓` 等；
-    值后面的说明文字保留下来供核验单展示。无法识别的状态按未通过处理，
-    并保留原文，不假装通过。
+    值后面的说明文字保留下来供核验单展示。红项（fail）只给显式声明的
+    "未通过"；无法识别的描述性文本按"未记录"（none）处理不判红——
+    自检书写格式走样不应被放大成核验红项（2026-09-20 可信搜索会话反馈，
+    实测模型写入"备注"等额外键导致交付前检查误判 5/7）。
     """
     text = str(raw or "").strip()
     lowered = text.lower()
@@ -427,7 +429,7 @@ def classify_check_value(raw: Any) -> Tuple[str, str]:
     for prefix in ("已通过", "通过", "合格", "pass", "ok", "true", "是", "✓", "yes"):
         if lowered.startswith(prefix):
             return "pass", text[len(prefix):].lstrip("：:，,、 ").strip()
-    return "fail", text
+    return "none", text
 
 
 def normalize_self_check(raw: Any) -> Optional[Dict[str, Tuple[str, str]]]:
@@ -435,8 +437,13 @@ def normalize_self_check(raw: Any) -> Optional[Dict[str, Tuple[str, str]]]:
         return None
     items: Dict[str, Tuple[str, str]] = {}
     for key, value in raw.items():
+        # 只认五项标准自检键（英文/中文变体映射）；白名单外的键（备注、待核验、
+        # 下一步补充等描述性额外键）不计入核验单——分母不被撑大，多余键不构成
+        # "交付前检查"定义的核验项。
+        label = SELF_CHECK_LABELS.get(key) or SELF_CHECK_LABELS.get(str(key))
+        if label is None:
+            continue
         status, note = classify_check_value(value)
-        label = SELF_CHECK_LABELS.get(key, SELF_CHECK_LABELS.get(str(key), str(key)))
         items[label] = (status, note)
     return items or None
 
@@ -490,17 +497,27 @@ def compute_verification(answer: str, sources: List[Dict[str, str]], payload: Di
     self_check = None
     if self_items:
         passed = sum(1 for status, _ in self_items.values() if status == "pass")
-        self_check = {"items": self_items, "passed": passed, "total": len(self_items),
-                      "status": "pass" if passed == len(self_items) else "fail"}
+        fails = sum(1 for status, _ in self_items.values() if status == "fail")
+        # 状态由显式 fail 决定；none（描述性值/未记录）不判红也不拖垮通过
+        status = "fail" if fails else ("pass" if passed else "missing")
+        # 分母固定为五项标准检查项，不取"实际写入的键数"——否则只写 1 个键会显示
+        # "✓ 1/1"，把"只做了一项"显示成满通过（2026-09-21 修复）
+        missing_items = [label for key, label in SELF_CHECK_ITEMS if label not in self_items]
+        self_check = {"items": self_items, "passed": passed, "total": len(SELF_CHECK_ITEMS),
+                      "missing_items": missing_items, "status": status}
     else:
-        self_check = {"items": {}, "passed": 0, "total": len(SELF_CHECK_ITEMS), "status": "missing"}
+        self_check = {"items": {}, "passed": 0, "total": len(SELF_CHECK_ITEMS),
+                      "missing_items": [label for _, label in SELF_CHECK_ITEMS], "status": "missing"}
 
     # 政策效力：无法自动判定现行效力，列出建议人工复核
     policy_count = coverage.get("policy", 0)
 
     trace_ok = cited_sources and not missing_excerpts
     binding_ok = (not unbound) and not no_citation
-    overall_passed = trace_ok and binding_ok
+    # 成稿自检显式写"未通过"时必须否决报告级结论：自检发现未闭环（规则要求先补搜闭环，
+    # 补不到停下与用户确认），不得照样打「已核验」章（2026-09-21 修复）
+    self_check_ok = self_check["status"] != "fail"
+    overall_passed = bool(trace_ok and binding_ok and self_check_ok)
 
     reasons = []
     if not sources:
@@ -511,11 +528,19 @@ def compute_verification(answer: str, sources: List[Dict[str, str]], payload: Di
         reasons.append(f"有 {len(unbound)} 处角标找不到对应材料")
     if self_check["status"] == "fail":
         reasons.append("交付前检查有没过的项")
+    if missing_links:
+        reasons.append(f"有 {len(missing_links)} 条正文依据没有原文链接或存档快照，无法回看")
+
+    if overall_passed and missing_links:
+        # 摘录可比对、结论成立，但确有材料无回看通道时，顶部表述要与事实一致
+        overall_label = f"核验完成，其中 {len(missing_links)} 条依据无原文或存档快照可回看"
+    else:
+        overall_label = "核验完成，正文依据逐条对过原文" if overall_passed else "核验未完全通过"
 
     return {
         "overall": {
             "passed": overall_passed,
-            "label": "核验完成，正文依据逐条对过原文" if overall_passed else "核验未完全通过",
+            "label": overall_label,
             "reasons": reasons,
         },
         "traceability": {"total": len(cited_sources), "passed": trace_passed,
@@ -769,7 +794,9 @@ def parse_answer_blocks(answer: str, valid_ids: set, chip_map: Optional[Dict[str
             continue
         # 引文胶囊位置规范：角标与后随标点换位——标点紧跟文字，胶囊放标点之后
         # （避免胶囊把句号挤到下一行孤悬，对齐深知晓原型"…内容。～出处"形态）
-        block = re.sub(r"\[(\d+)\]([。；，、！？：；,.])", r"\2[\1]", block)
+        # 注意：须把连续角标序列整体换位（如 [13][14]；），否则标点被夹在两个胶囊
+        # 中间——[13]；[14] 会让分号"跑到胶囊后边"（2026-09-24 渝沪实测截图）。
+        block = re.sub(r"((?:\[\d+\])+)([。；，、！？：；,.])", r"\2\1", block)
         ids = citation_ids(block)
         repl = make_block_repl(block)
         heading_match = re.match(r"^(#{1,4})\s+(.+)$", block)
@@ -907,15 +934,24 @@ def render_verify_panel(v: Dict[str, Any]) -> str:
         reasons_html = '<div class="v-reasons">' + "；".join(esc(r) for r in ov["reasons"]) + "</div>"
 
     tr = v["traceability"]
+    n_no_link = len(tr.get("missing_links") or [])
     if not tr["total"]:
         tr_html = ('<div class="vi"><span class="s fail">✗ 依据溯源 0/0</span>'
                    '<span class="d">未识别到来源材料</span></div>')
-    elif tr["passed"] == tr["total"]:
+    elif tr["passed"] == tr["total"] and not n_no_link:
         tr_html = (f'<div class="vi"><span class="s ok">✓ 依据溯源 {tr["passed"]}/{tr["total"]}</span>'
                    f'<span class="d">每条素材摘录可比对，原文或存档快照可回看</span></div>')
-    else:
+    elif tr["passed"] == tr["total"]:
+        # 摘录齐全但有材料没有回看通道：不得照写"原文或存档快照可回看"
+        # （2026-09-21 修复：此前 missing_links 算出却从未参与结论，属虚假背书）
         tr_html = (f'<div class="vi"><span class="s warn">◐ 依据溯源 {tr["passed"]}/{tr["total"]}</span>'
-                   f'<span class="d">待补摘录 {len(tr.get("missing_excerpts") or [])} 条</span></div>')
+                   f'<span class="d">摘录可比对，其中 {n_no_link} 条没有原文链接或存档快照、无法回看</span></div>')
+    else:
+        detail = f'待补摘录 {len(tr.get("missing_excerpts") or [])} 条'
+        if n_no_link:
+            detail += f'；{n_no_link} 条无原文链接或快照'
+        tr_html = (f'<div class="vi"><span class="s warn">◐ 依据溯源 {tr["passed"]}/{tr["total"]}</span>'
+                   f'<span class="d">{detail}</span></div>')
 
     bd = v["binding"]
     if bd.get("no_citation"):
@@ -949,13 +985,22 @@ def render_verify_panel(v: Dict[str, Any]) -> str:
     if sc["status"] == "pass":
         notes = "；".join(note for _, note in sc["items"].values() if note)
         title_attr = f' title="{esc(notes)}"' if notes else ""
-        item_names = "、".join(sc["items"].keys()) if sc["items"] else "、".join(label for _, label in SELF_CHECK_ITEMS)
-        sc_html = (f'<div class="vi"><span class="s ok"{title_attr}>✓ 交付前检查 {sc["passed"]}/{sc["total"]}</span>'
-                   f'<span class="d">{esc(item_names)}{esc(" · 悬停查看说明" if notes else "")}</span></div>')
+        missing = sc.get("missing_items") or []
+        none_count = sum(1 for status, _ in sc["items"].values() if status == "none")
+        unrecorded = len(missing) + none_count
+        none_note = f"（{unrecorded} 项未记录）" if unrecorded else ""
+        # 缺项点名，避免"只写了一项"与"五项都过"在视觉上等同
+        if missing:
+            detail = f"缺少：{'、'.join(missing)}"
+        else:
+            item_names = "、".join(sc["items"].keys())
+            detail = item_names + (" · 悬停查看说明" if notes else "")
+        sc_html = (f'<div class="vi"><span class="s ok"{title_attr}>✓ 交付前检查 {sc["passed"]}/{sc["total"]}{esc(none_note)}</span>'
+                   f'<span class="d">{esc(detail)}</span></div>')
     elif sc["status"] == "fail":
         failed_parts = []
         for label, (status, note) in sc["items"].items():
-            if status != "pass":
+            if status == "fail":
                 suffix = f"（{note[:40]}…）" if len(note) > 40 else (f"（{note}）" if note else "")
                 failed_parts.append(label + suffix)
         sc_html = (f'<div class="vi"><span class="s fail">✗ 交付前检查 {sc["passed"]}/{sc["total"]}</span>'
@@ -963,19 +1008,17 @@ def render_verify_panel(v: Dict[str, Any]) -> str:
     else:
         sc_html = '<div class="vi"><span class="s none">— 交付前检查 未记录</span><span class="d">本次溯源 JSON 没写入检查结果</span></div>'
 
-    manual = ""
-    if v["policy_count"]:
-        manual = (f'<div class="vi"><span class="s man">◐ 现行效力</span>'
-                  f'<span class="d">{v["policy_count"]} 份政策文件建议按官方发布确认是否现行有效</span></div>')
+    # "现行效力"人工复核提示行已按产品要求移除（2026-09-19）：政策是否现行有效
+    # 无法自动判定，此提示对用户无操作价值；policy_count 仅保留在计算层不再展示。
 
     return f"""
     <div class="verify {state}">
       <div class="v-head"><span class="v-shield">{'✓' if ov['passed'] else '!'}</span>{esc(ov['label'])}{stamp}</div>
       {reasons_html}
       <div class="v-grid">
-        {tr_html}{bd_html}{fr_html}{cov_html}{sc_html}{manual}
+        {tr_html}{bd_html}{fr_html}{cov_html}{sc_html}
       </div>
-      <div class="v-note">核验方式：先用深知可信搜索找权威来源，再把正文每处依据和原文逐条比对（都能点开原文回看），最后做了交付前五项检查。政策是否现行有效，以官方发布为准。{manual_checks_html}</div>
+      <div class="v-note">核验方式：先用深知可信搜索找权威来源，再把正文每处依据和原文逐条比对（都能点开原文回看），最后做了交付前五项检查。{manual_checks_html}</div>
     </div>"""
 
 
@@ -1082,9 +1125,11 @@ def strip_leading_chain(text: str, chain: List[str]) -> str:
 
 
 def render_crumb(chain: List[str]) -> str:
-    """面包屑标题链：文章 › 章 › 节（标题链是模型生成的结构化位置，核验核心抓手）。"""
+    """面包屑标题链：文章 › 章 › 节（标题链是模型生成的结构化位置，核验核心抓手）。
+    段落本身无章节层级（链上只有文章名）时不显示——材料卡标题已是文章名，
+    单独一行重复文章名对定位无增量（徐总 2026-09-19 反馈）。"""
     parts = [esc(level) for level in chain if level]
-    if not parts:
+    if len(parts) < 2:
         return ""
     return '<span class="crumb">' + ' <i>›</i> '.join(parts) + "</span>"
 
@@ -1119,8 +1164,14 @@ def render_source_card(source: Dict[str, str], for_print: bool = False) -> str:
         vk = f'<span class="sc-vk warn">◐ {reason}</span>'
         note_html = ""
     links = render_source_links(source.get("url"), source.get("policy_url", ""), source.get("snapshot", ""), source.get("link_dead", False))
-    # 关键性行：有文号（接口 policyFiles 匹配）时"文号 · 数据源 · 日期"，否则"数据源 · 日期"
-    meta_parts = [v for v in [source.get("doc_number"), source.get("agency"), source.get("date"), source.get("area")]
+    # 关键性行：有文号（接口 policyFiles 匹配）时"文号 · 数据源 · 日期"，否则"数据源 · 日期"。
+    # 文号必须是标准格式（〔年份〕序号）；描述性文字（"XX印发"类自造描述）不显示，当无文号处理。
+    _dn = source.get("doc_number") or ""
+    # 只显示标准文号形式，拦掉模型自造的描述性文字（"中办、国办 2026 年印发"类）。
+    # 除"〔年份〕序号"外，主席令/国务院令/部令等法定令号同样合规，一并放行
+    # （2026-09-21 修复：真实任务里《社会保险法》《国务院令第765号》曾被整条丢弃）
+    _dn = _dn if re.search(r"〔\d{4}〕\s*\d+\s*号|第\s*(?:\d+|[〇零一二三四五六七八九十百千]+)\s*号", _dn) else ""
+    meta_parts = [v for v in [_dn, source.get("agency"), source.get("date"), source.get("area")]
                   if v and v != "未知来源"]
     meta = " | ".join(meta_parts)
     # 高可信徽标：仅"发布日期可信度=高"（模型治理入库、标题模型精抽）的材料；"较高"（门户抓取）不标。
@@ -2107,7 +2158,7 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
     <div class="doc-paper">
     {render_section_cards(sections, sources)}
     </div>
-    <div class="foot">深知公文写作 · 溯源核验报告 ｜ 内容由 AI 生成，仅供参考，政策现行效力以官方发布为准</div>
+    <div class="foot">深知公文写作 · 溯源核验报告 ｜ 内容由 AI 生成，仅供参考</div>
   </main>
 
   {render_library_view(sources, hot_terms)}
@@ -2130,21 +2181,46 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
 
 
 def align_sources_to_answer(answer: str, sources: List[Dict[str, str]]) -> List[Dict[str, str]]:
-    cited = citation_ids(answer)
-    if not cited or not sources:
-        return sources
-    existing = {source["id"] for source in sources}
-    if existing.intersection(cited):
-        return sources
-    aligned = [dict(source) for source in sources]
-    for idx, citation in enumerate(cited):
-        if idx >= len(aligned):
-            break
-        aligned[idx]["id"] = citation
-        aligned[idx]["type_key"] = aligned[idx].get("type_key", "material")
-        aligned[idx]["type_label"] = aligned[idx].get("type_label", "材料")
-        aligned[idx]["type_css"] = aligned[idx].get("type_css", "mat")
-    return aligned
+    """不再按位置给材料重编号。
+
+    2026-09-21 修复：原实现会在"正文角标与素材 id 完全不相交"时按顺序把素材改号
+    迎合角标——正文写 `[7]` 而只有 1 条材料时，会被洗成"✓ 引用对应 1/1"，与本文件
+    "未绑定角标绝不按位置猜测"的设计原则相反。现如实返回原素材，由核验单报未绑定。
+    """
+    return sources
+
+
+def _check_degraded_input(payload: Dict[str, Any], path: str) -> None:
+    """渲染前硬校验：发现会产出"残缺核验报告"的输入直接报错，阻断静默降级。
+
+    2026-09-24 WorkBuddy 实测：手写溯源 JSON 缺 recalled_materials、self_check 结构
+    不完整，渲染器静默显示"依据溯源 0/24 / 材料新旧 未记录 / 交付前检查 未记录"。
+    这里只拦截两个必然导致报告失真的情况；完整校验用 scripts/check_materials.py。
+    """
+    problems = []
+    # ① 执行过搜索的任务必须有未引用召回材料（recalled 空 = 材料层缺全量召回）
+    recalled = payload.get("recalled_materials") or payload.get("未引用素材") or []
+    has_materials = bool(payload.get("materials") or payload.get("素材使用情况"))
+    if has_materials and not recalled:
+        problems.append("recalled_materials 为空——执行过搜索的任务必须包含全部未引用召回材料（可运行 scripts/check_materials.py 校验）")
+    # ② self_check 必须五项齐全（dict 或 list），否则核验单五项失真
+    sc = None
+    for holder in (payload, payload.get("content") if isinstance(payload.get("content"), dict) else {}):
+        sc = sc or holder.get("selfCheck") or holder.get("self_check")
+    if sc is None:
+        problems.append("self_check 缺失——核验单将显示五项'未记录'，必须如实写入五项检查结果")
+    elif isinstance(sc, dict):
+        keys = {re.sub(r"\s+", "", k) for k in sc.keys()}
+        expected = {re.sub(r"\s+", "", label) for _, label in SELF_CHECK_ITEMS}
+        missing = expected - keys
+        if missing:
+            problems.append(f"self_check 缺 {len(missing)} 项（{sorted(missing)}）——核验单会显示'未记录'")
+    if problems:
+        raise SystemExit(
+            "错误：溯源 JSON 存在会导致核验报告失真的问题，已停止生成。\n  - "
+            + "\n  - ".join(problems)
+            + "\n请修正后重跑，或先运行 scripts/check_materials.py 定位问题。"
+        )
 
 
 def main() -> None:
@@ -2159,6 +2235,8 @@ def main() -> None:
     args = parser.parse_args()
 
     payload = load_json(Path(args.input_json))
+    # 3.7.5 修复：渲染前硬校验残缺输入（recalled 空 / self_check 缺项），阻断静默降级
+    _check_degraded_input(payload, args.input_json)
     answer_override = ""
     if args.answer_file:
         answer_override = Path(args.answer_file).expanduser().read_text(encoding="utf-8")

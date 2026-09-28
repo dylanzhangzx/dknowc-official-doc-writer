@@ -51,6 +51,9 @@ def safe_output(value: str, title: str) -> Path:
         path = raw.resolve() if raw.is_absolute() else (OUTPUT_DIR / raw.name).resolve()
     else:
         safe_title = "".join("_" if char in '\\/:*?"<>| ' else char for char in title).strip("_")
+        # title 常已带 _溯源核验报告 后缀（溯源 JSON 的命名惯例），追加前先剥掉，
+        # 避免生成 "…_溯源核验报告_溯源核验报告.html"（2026-09-21 修复）
+        safe_title = re.sub(r"(_溯源核验报告)+$", "", safe_title)
         path = (OUTPUT_DIR / f"{safe_title[:80] or '溯源核验报告'}_溯源核验报告.html").resolve()
     if path.suffix.lower() not in {".html", ".htm"}:
         path = path.with_suffix(".html")
@@ -92,6 +95,11 @@ def load_source_index() -> dict:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
+            continue
+        # 顶层为数组的索引 JSON（all_materials_index.json 等）不是搜索结果，跳过。
+        # 2026-09-21 修复：此前直接 data.get() 会抛 AttributeError: 'list' object has no
+        # attribute 'get'，导致溯源报告生成中断（生产日志已两次出现，靠临时移走文件绕过）
+        if not isinstance(data, dict):
             continue
         # 兼容两种落盘格式：--clean 白名单（顶层 articles）与接口原始响应（content.data）
         articles = data.get("articles") if isinstance(data.get("articles"), list) else None
@@ -305,7 +313,8 @@ def main() -> None:
         print(f"快照校验：{total} 条路径合法放行 / 弃用 {dropped} 条非法路径（已自动补全 /A/，不做网络检测）")
     # 生成前校验：有素材但正文无角标 = 无法建立核验对应，拒绝生成，要求先修 JSON
     materials_count = len(data.get("materials") or [])
-    if materials_count and not re.search(r"\[\d+\]", answer):
+    # 角标形态允许半角 [n] 与全角【n】（渲染层 normalize_citations 两者都支持）
+    if materials_count and not re.search(r"[\[【]\s*\d+\s*[\]】]", answer):
         print(f"错误：materials 共 {materials_count} 条，但正文 document_content 没有任何 [n] 角标，无法生成核验对应。", file=sys.stderr)
         print("请修正溯源 JSON：在正文关键结论后标注 [1]、[2] 等角标并与 materials 一一对应，然后重新运行本脚本。", file=sys.stderr)
         raise SystemExit(1)

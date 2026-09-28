@@ -190,8 +190,8 @@ def detect_quota_exhausted(status_code=None, errmsg=None, biz_status=None):
 def user_message_for_error(status_code=None, quota_exhausted=False):
     """按错误类型返回给用户的固定话术（Agent 必须原样转述，不得改写后发挥）。"""
     if quota_exhausted:
-        return (f"检索调不动，很可能是额度用完了：到 {MAAS_PLATFORM_URL} 看一下额度，"
-                "完成实名认证可以领 100 元体验金。")
+        return (f"检索调不动，很可能是积分用完了：到 {MAAS_PLATFORM_URL} 看一下积分，"
+                "完成实名认证可以再领 10 万积分。")
     if status_code == 401:
         return "访问密钥校验没通过（密钥可能已失效），我重新获取一下密钥；还不行的话需要重新验证手机号。"
     if status_code == 403:
@@ -517,7 +517,7 @@ def dkag_search(
             return {
                 "error": True,
                 "quota_exhausted": quota_exhausted,
-                "message": ("深知搜索额度或余额已用尽，请到 MaaS 管理平台实名认证领取赠金或充值后重试"
+                "message": ("深知搜索积分已用尽，请到 MaaS 管理平台实名认证再领积分或充值后重试"
                             if quota_exhausted else "深知搜索接口返回异常"),
                 "user_message": user_message_for_error(quota_exhausted=quota_exhausted),
                 "ret": result.get("ret"),
@@ -545,7 +545,7 @@ def dkag_search(
         return {
             "error": True,
             "quota_exhausted": quota_exhausted,
-            "message": ("深知搜索额度或余额已用尽，请到 MaaS 管理平台实名认证领取赠金或充值后重试"
+            "message": ("深知搜索积分已用尽，请到 MaaS 管理平台实名认证再领积分或充值后重试"
                         if quota_exhausted else
                         "请求失败：网络连接、代理或接口返回异常，请检查运行环境和 API Key"),
             "user_message": user_message_for_error(status_code=status_code, quota_exhausted=quota_exhausted),

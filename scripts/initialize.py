@@ -70,6 +70,11 @@ def check_environment():
         "api_key_source": config_status["api_key_source"],
         "api_key_hint": config_status["api_key_hint"],
         "config_issue": None if config_status["api_key_configured"] else "api_key_missing",
+        # channel_note：通道提示（常驻）。3.7.5 起检索与大纲统一走脚本通道，不再走 MCP。
+        "channel_note": (
+            "检索与大纲统一走本 Skill 脚本通道（deep_query.py / dkag_search.py / outline_reference.py），"
+            "需要 API Key。MCP「深知可信工作台」通道于 3.7.5 停用，待其大结果落盘方案改造完成后另行加回。"
+        ),
         "search_ready": config_status["api_key_configured"] and requests_available,
         "search_blocking_issues": search_blocking_issues,
         "search_note": None if config_status["api_key_configured"] else f"环境变量 {API_KEY_ENV} 中未配置有效 API Key；仅当任务需要深知搜索（查政策依据、数据支撑、案例参考）时才需要配置，不涉及搜索的写作任务可直接使用。",
@@ -78,7 +83,7 @@ def check_environment():
         "guide_message": None if config_status["api_key_configured"] else (
             "这份材料需要引用政策原文和权威数据，凭印象写政策名和数字，审稿时最容易被挑出来。"
             "开通权威检索后，每条政策、数据都带原文出处、可点开核验。\n"
-            "开通是免费的：自带 300 次权威检索额度，完成实名认证还能再领 100 元体验金。"
+            "开通是免费的：注册即赠送 10 万积分，完成实名认证再送 10 万积分。"
             "只需手机号收一次验证码——两步、约 10 秒，不用去网站，剩下的我来办；手机号仅用于本次验证，不会有营销骚扰。\n"
             "也可以先不开通：我基于你手头的材料先写，政策依据的位置先标注'待补'。"
             "想先看看开通后生成的核验报告长什么样，我可以发你一份示例看看。"
@@ -140,7 +145,7 @@ def _module_available(module_name):
 
 
 def check_api_key_config():
-    # 环境变量优先，缺失时从 ~/.zshrc 兜底解析（宿主进程早于 key 写入启动时不误报缺失）
+    # 环境变量优先，缺失时从专用配置文件兜底解析（宿主进程早于 key 写入启动时不误报缺失）
     try:
         from api_key import resolve_api_key
         api_key, source = resolve_api_key()
@@ -151,7 +156,7 @@ def check_api_key_config():
         return {
             "api_key_configured": False,
             "api_key_source": None,
-            "api_key_hint": f"环境变量 {API_KEY_ENV} 与 ~/.zshrc 中均未找到有效 API Key，请先通过 MaaS 初始化获取。",
+            "api_key_hint": f"环境变量 {API_KEY_ENV} 与 Key 专用配置文件（~/.config/dknowc/api_key）中均未找到有效 API Key，请先通过 MaaS 初始化获取。",
         }
     return {
         "api_key_configured": True,

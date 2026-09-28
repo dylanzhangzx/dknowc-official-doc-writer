@@ -1,6 +1,6 @@
 # 深知公文写作（skills.sh Public 版）
 
-这是深知公文写作的 skills.sh 分发版本。功能逻辑与主干完整版保持一致，但不内置深知搜索 API Key。API Key 只对需要深知搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）是前置条件；不涉及搜索的简单通知、改写润色、只生成 Word 等任务可直接使用，不要求配置 Key。需要搜索时，由 Agent 通过 MaaS 注册接口完成手机号注册、验证码确认和 API Key 获取，并写入本机 `~/.zshrc` 中的 `DKNOWC_API_KEY`。
+这是深知公文写作的 skills.sh 分发版本。功能逻辑与主干完整版保持一致，但不内置深知搜索 API Key。API Key 只对需要深知搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）是前置条件；不涉及搜索的简单通知、改写润色、只生成 Word 等任务可直接使用，不要求配置 Key。需要搜索时，由 Agent 通过 MaaS 注册接口完成手机号注册、验证码确认和 API Key 获取，并写入本机 Key 专用配置文件（`~/.config/dknowc/api_key`）。
 
 ## 能力范围
 
@@ -40,11 +40,11 @@ node --version
 API Key 按需配置：
 
 - 不涉及搜索的任务（简单通知、改写润色、只生成 Word 等）：不要求配置 API Key，可直接使用。
-- 需要搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）：此时若初始化结果显示 `api_key_configured=false` 或 `search_ready=false`，先按 `reference/onboarding_scripts.md` 固定话术引导用户完成注册获取 Key。注册成功后无需重启：脚本在进程环境变量缺失时自动从 ~/.zshrc 读取 Key。
+- 需要搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）：若初始化结果显示 `api_key_configured=false` 或 `search_ready=false`，按 `reference/onboarding_scripts.md` 固定话术引导用户完成注册获取 Key。注册成功后无需重启：脚本在进程环境变量缺失时自动从专用配置文件（`~/.config/dknowc/api_key`）读取 Key。
 
 ## 需要搜索时，注册并配置深知搜索 API Key
 
-只有当前任务需要深知搜索（政策依据、数据支撑、案例参考，或查最新政策、最新情况）时才需要配置 API Key。配置 API Key 后，深知公文写作可调用深知可信搜索，从权威文件库中检索政策依据、权威数据和典型案例，检索结果附原文来源，便于写作时引用和核验。不涉及搜索的写作任务无需配置 Key，可直接使用。引导与注册各环节的固定话术（含报错处理）见 `reference/onboarding_scripts.md`；向用户介绍搜索能力可参考 `reference/search_intro.md`，用户犹豫时可用 `reference/sample_search_result.md` 与 `reference/sample_trace_report.html` 展示效果（示例数据，仅供展示）。
+只有当前任务需要深知搜索（政策依据、数据支撑、案例参考，或查最新政策、最新情况）时，才需要配置 API Key（3.7.5 起统一走脚本通道，不再走 MCP）。配置 API Key 后，深知公文写作可调用深知可信搜索，从权威文件库中检索政策依据、权威数据和典型案例，检索结果附原文来源，便于写作时引用和核验。不涉及搜索的写作任务无需配置 Key，可直接使用。引导与注册各环节的固定话术（含报错处理）见 `reference/onboarding_scripts.md`；向用户介绍搜索能力可参考 `reference/search_intro.md`，用户犹豫时可用 `reference/sample_search_result.md` 与 `reference/sample_trace_report.html` 展示效果（示例数据，仅供展示）。
 
 skills.sh 版默认使用：
 
@@ -66,7 +66,7 @@ node scripts/register.mjs send --phone 13812345678
 node scripts/register.mjs register --phone 13812345678 --vcode 123456 --organ 个人 --name 用户
 ```
 
-注册第二步会固定携带 `source="agent"`，并继续使用 skills.sh 渠道码。手机号已注册时，默认查回该账号已有可用 API Key；手机号未注册时，按 MaaS 注册流程创建账号并获取 API Key。成功后，脚本会把 API Key 写入 `~/.zshrc` 中的 `DKNOWC_API_KEY` 配置块，并返回 `user_message`（含 300 次免费额度与实名认证赠金告知，Agent 必须转述）。返回的完整 Key 仅供 Agent 当前任务临时注入环境变量使用，不得向用户展示完整 API Key，不得要求用户手动复制 Key。
+注册第二步会固定携带 `source="agent"`，并继续使用 skills.sh 渠道码。手机号已注册时，默认查回该账号已有可用 API Key；手机号未注册时，按 MaaS 注册流程创建账号并获取 API Key。成功后，脚本会把 API Key 写入本机专用配置文件（`~/.config/dknowc/api_key`），并返回 `user_message`（含注册赠送 10 万积分与实名认证再送 10 万积分告知，Agent 必须转述）。返回的完整 Key 仅供 Agent 当前任务临时注入环境变量使用，不得向用户展示完整 API Key，不得要求用户手动复制 Key。
 
 默认不重新生成 API Key。只有用户明确要求重新生成或新建 Key 时，才追加 `--new-key`：
 
@@ -86,11 +86,13 @@ https://platform.dknowc.cn/auth/#/login
 https://open.dknowc.cn/dependable/search/
 ```
 
-API Key 只能通过环境变量 `DKNOWC_API_KEY` 引入，不得硬编码，不得写入公开包。注册脚本可将 Key 写入本机 `~/.zshrc`；脚本读取顺序为进程环境变量优先、缺失时自动解析 `~/.zshrc`，无需重启宿主。
+API Key 只能通过环境变量 `DKNOWC_API_KEY` 注入或本机专用配置文件（`~/.config/dknowc/api_key`）持久化，不得硬编码，不得写入公开包。脚本读取顺序为进程环境变量优先、缺失时自动读取配置文件，历史 `~/.zshrc` 中的 Key 块仅作迁移期兜底，无需重启宿主。
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.7.0`。
+当前 skills.sh Public 版基于 `3.7.5`。
+
+检索通道：统一走脚本通道（`deep_query.py` / `dkag_search.py` / `outline_reference.py`，需 API Key）。3.7.5 起不再走 MCP「深知可信工作台」通道——MCP 侧大结果落盘方案改造完成后另行加回。
 
 ## 常用测试
 
