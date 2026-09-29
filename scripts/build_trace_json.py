@@ -48,7 +48,9 @@ ART_SNAPSHOT_FIELDS = ("快照链接", "screenShotPath", "snapshot")
 SEL_TYPE_FIELDS = ("type", "素材类型", "类型")
 SEL_TITLE_FIELDS = ("标题", "文章标题", "title", "material_name")
 SEL_URL_FIELDS = ("源网址", "source_url", "sourceUrl", "原文链接", "url")
-SEL_SEARCH_KEY_FIELDS = ("search_key", "搜索条件", "deep_group", "搜索地域")
+# 分组键兜底链不含"搜索地域"（3.7.6 修复）：地域名（"中国"/"浙江省"）做分组键无意义，
+# 杭州实测 75/295 篇因"搜索目的"为空退化成地域胶囊；全部落空时归"其他检索"。
+SEL_SEARCH_KEY_FIELDS = ("search_key", "搜索条件", "deep_group")
 
 SELF_CHECK_ITEMS = ["事实有据", "结构完整", "无占位残留", "无AI味", "格式合规"]
 
@@ -99,10 +101,12 @@ def map_article_fields(art: dict) -> dict:
         "发布日期": first_value(art, ("发布日期", "date", "日期")),
         "发布日期可信度": first_value(art, ART_CONFIDENCE_FIELDS),
         "快照链接": first_value(art, ART_SNAPSHOT_FIELDS),
-        # search_key：材料专库分组胶囊的依据，必须用"搜索目的"（真实搜索路数，如
+        # search_key：知识专库分组胶囊的依据，必须用"搜索目的"（真实搜索路数，如
         # "查找两地现行人才落户政策…"），不能用 deep_group/搜索地域（那是服务端子查询
         # 或地域组合，会把 7 路真实搜索展成几十个碎片胶囊，2026-09-24 渝沪实测 29 个）。
-        "search_key": first_value(art, ("搜索目的", "purpose")) or first_value(art, SEL_SEARCH_KEY_FIELDS),
+        "search_key": (first_value(art, ("搜索目的", "purpose"))
+                       or first_value(art, SEL_SEARCH_KEY_FIELDS)
+                       or "其他检索"),
     }
 
 

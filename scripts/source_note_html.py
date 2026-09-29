@@ -242,7 +242,7 @@ def to_trace_payload(data: dict) -> tuple[dict, str, str]:
         for index, item in enumerate(group, 1):
             if not isinstance(item, dict):
                 continue
-            material_name = first_value(item, "material_name", "材料名称", "title", "文章标题") or f"来源材料{index}"
+            material_name = first_value(item, "material_name", "材料名称", "title", "文章标题") or f"来源文章{index}"
             # 新结果必须直接携带 source_url；标题匹配仅兼容历史 JSON。
             matched = source_index.get(material_name) or source_index.get(normalize_title(material_name), {})
             source_url = first_value(item, "source_url", "sourceUrl", "源网址", "原文链接", "url") or matched.get("source_url", "")

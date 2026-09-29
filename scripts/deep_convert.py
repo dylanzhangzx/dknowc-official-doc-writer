@@ -141,9 +141,12 @@ def convert(data, area: str, purpose: str) -> dict:
         articles.append(article)
 
     knowledge_base = first_value(data, "knowledgeBase", "knowledge_base_url") if isinstance(data, dict) else ""
+    raw_query = first_value(data, "query") if isinstance(data, dict) else ""
     search_meta = {
-        "query": first_value(data, "query") if isinstance(data, dict) else "",
-        "purpose": purpose,
+        "query": raw_query,
+        # purpose 兜底（3.7.6 修复）：--purpose 为空时用该路 query 兜底——
+        # 留空会导致合并产物文章"搜索目的"缺失，溯源分组键退化成地域碎片。
+        "purpose": purpose or raw_query,
         "area": area,
         "time": "",
         "requested_time": "",

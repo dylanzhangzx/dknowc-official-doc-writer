@@ -7,7 +7,8 @@
 
   1. 材料来源可回溯：每条 materials / recalled_materials 的标题/源网址能在
      合并产物（merged_all.json 或等价 --clean 同构文件）中找到对应；
-  2. 字段完整性：materials 必须带 source_url / excerpts / type，recalled_materials 非空；
+  2. 字段完整性：materials 必须带 excerpts / type（source_url 允许缺省——接口未返回时
+     按规则不填、不猜测），recalled_materials 非空；
   3. 角标对应：document_content 的 [n] 角标与 materials 一一对应，无越界；
   4. self_check 完整：五项检查结果必须全部写入（不得缺失导致"未记录"）。
 
@@ -100,20 +101,30 @@ def check_material_source(mat: dict, index: dict, mat_no: int) -> list[str]:
     return errors
 
 
-def check_citations(content: str, n_materials: int) -> list[str]:
-    """校验 document_content 的 [n] 角标与 materials 对应。"""
+def check_citations(content: str, materials: list) -> list[str]:
+    """校验 document_content 的 [n] 角标与 materials 一一对应。
+
+    角标 n 是**素材清单中的位置序号**：写作时按清单顺序标 [n]，清单里未被正文引用的条目
+    会移入 recalled_materials，因此 `build_trace_json.py` 产出的 materials **只装配被引用
+    的那些，id 天然是稀疏的**（如清单 65 篇中未引用第 30 篇，则 id = 1..29、31..65）。
+    故此处不能用 `len(materials)` 当上界、也不能要求 id 从 1 连续。
+    （2026-09-29 修复：此前按 `len(materials)` + `range(1, n+1)` 校验，只要素材清单里存在
+    未被正文引用的条目，就必然误报"角标越界"且校验永远无法通过——成都实测踩到，绕行方案
+    是裁清单、重编号角标，属被迫绕过。）
+    """
     errors = []
     if not content:
         return ["document_content 为空"]
-    cites = set()
-    for m in re.finditer(r"[\[【]\s*(\d+)\s*[\]】]", content):
-        cites.add(int(m.group(1)))
+    cites = {int(m.group(1)) for m in re.finditer(r"[\[【]\s*(\d+)\s*[\]】]", content)}
     if not cites:
-        return [f"document_content 没有任何 [n] 角标（materials 共 {n_materials} 条，无法核验对应）"]
-    out_of_range = [c for c in cites if c > n_materials]
+        return [f"document_content 没有任何 [n] 角标（materials 共 {len(materials)} 条，无法核验对应）"]
+    ids = {int(m["id"]) for m in materials if str(m.get("id", "")).strip().isdigit()}
+    if not ids:
+        return ["materials 缺 id 字段（应为该材料在素材清单中的位置序号），无法核验角标对应"]
+    out_of_range = sorted(c for c in cites if c not in ids)
     if out_of_range:
-        errors.append(f"角标越界（超出 materials 数 {n_materials}）：{sorted(out_of_range)}")
-    unused = [i for i in range(1, n_materials + 1) if i not in cites]
+        errors.append(f"角标在 materials 中找不到对应条目（现有 id：{sorted(ids)}）：{out_of_range}")
+    unused = sorted(ids - cites)
     if unused:
         errors.append(f"以下材料未被正文引用（如确未引用应移入 recalled_materials）：{unused}")
     return errors
@@ -206,9 +217,12 @@ def main() -> int:
         errors.extend(check_material_source(mat, index, i))
 
     # ② 字段完整性
+    # 注：source_url **允许缺省** —— search_guide.md 明确"接口未返回原网址时不填、不猜测"，
+    # 此处若强制报错就与规则直接冲突（2026-09-29 修复：成都实测中《2025年成都市提振消费
+    # 专项行动实施方案》接口未返回源网址，一旦被正文引用就必然校验失败，只能移出正文清单）。
+    # 来源可回溯性由上面的 check_material_source 用"合并产物标题/URL 反查"保证；报告端对
+    # 无源网址的材料会在卡片上如实标注"待补链接"。
     for i, mat in enumerate(materials, 1):
-        if not first_value(mat, MAT_URL_FIELDS):
-            errors.append(f"材料[{i}] 缺 source_url（如接口未返回应如实留空，但需有对应检索来源）")
         if not first_value(mat, MAT_EXCERPT_FIELDS):
             errors.append(f"材料[{i}] 缺摘录（excerpts/摘录，正文引用须可比对原文）")
         if not first_value(mat, MAT_TYPE_FIELDS):
@@ -217,7 +231,7 @@ def main() -> int:
         errors.append("recalled_materials 为空——执行过搜索的任务必须包含全部未引用召回材料")
 
     # ③ 角标对应
-    errors.extend(check_citations(trace.get("document_content") or "", len(materials)))
+    errors.extend(check_citations(trace.get("document_content") or "", materials))
 
     # ④ self_check 完整
     errors.extend(check_self_check(trace.get("self_check")))

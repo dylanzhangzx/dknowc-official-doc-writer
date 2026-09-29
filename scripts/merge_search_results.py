@@ -105,10 +105,14 @@ def merge_results(result_files: List[str]) -> Dict:
         search_meta = data.get("search_meta", {})
         region = search_meta.get("area") or infer_region_from_filename(str(safe_file_path))
         regions_searched.append(region)
+        # 搜索目的兜底（3.7.6 修复）：该路 --purpose 为空时用该路 query 兜底——
+        # 若留空，文章"搜索目的"缺失，溯源报告分组键（search_key）会退化成
+        # "中国"/"浙江省"等地域碎片，材料面板筛选胶囊失去意义（杭州实测 75/295 篇退化）。
+        purpose_val = search_meta.get("purpose") or search_meta.get("query") or ""
         searches.append({
             "file": str(safe_file_path),
             "query": search_meta.get("query", ""),
-            "purpose": search_meta.get("purpose", ""),
+            "purpose": purpose_val,
             "area": region,
             "time": search_meta.get("time", ""),
             "policy": search_meta.get("policy", False),
@@ -120,7 +124,7 @@ def merge_results(result_files: List[str]) -> Dict:
             knowledge_bases.append({
                 "file": str(safe_file_path),
                 "query": search_meta.get("query", ""),
-                "purpose": search_meta.get("purpose", ""),
+                "purpose": purpose_val,
                 "area": region,
                 "knowledgeBase": data.get("knowledgeBase", ""),
             })
@@ -182,8 +186,8 @@ def merge_results(result_files: List[str]) -> Dict:
                     existing["搜索地域"] = (existing.get("搜索地域") or "") + (("、" + region) if existing.get("搜索地域") else region)
                 if search_meta.get("query") and not existing.get("搜索词"):
                     existing["搜索词"] = search_meta.get("query")
-                if search_meta.get("purpose") and not existing.get("搜索目的"):
-                    existing["搜索目的"] = search_meta.get("purpose")
+                if purpose_val and not existing.get("搜索目的"):
+                    existing["搜索目的"] = purpose_val
                 continue
 
             seen_titles.add(key)
@@ -191,8 +195,8 @@ def merge_results(result_files: List[str]) -> Dict:
             article.setdefault("搜索地域", region)
             if search_meta.get("query"):
                 article.setdefault("搜索词", search_meta.get("query"))
-            if search_meta.get("purpose"):
-                article.setdefault("搜索目的", search_meta.get("purpose"))
+            if purpose_val:
+                article.setdefault("搜索目的", purpose_val)
             if article.get("源网址") and not article.get("原文链接"):
                 article["原文链接"] = article["源网址"]
             if article.get("sourceUrl") and not article.get("原文链接"):

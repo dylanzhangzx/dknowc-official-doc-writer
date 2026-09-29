@@ -972,6 +972,22 @@ def fix_reference_format(content_text: str) -> str:
     return content_text
 
 
+def strip_citation_markers(content_text: str) -> str:
+    """剥离正文中的 [n] / 【n】 引用角标（生成 Word 前统一清理）。
+
+    背景：素材清单先行要求写作时边写边标 [n] 角标——但角标只服务于
+    build_trace_json 装配溯源 JSON、在溯源核验报告 HTML 中变成可点击跳转；
+    **正式 Word 交付的正文不应内嵌来源角标**（SKILL.md 搜索规则第 10 条）。
+    此前模型常把同一份带角标正文直接交给本脚本，导致 Word 交付物残留
+    [1]…[23] 角标（2026-09-28 北京任务实测 86 个、渝沪任务 141 个）。
+    本函数作为兜底，在排版前统一剥离半角 [n] 与全角 【n】 形式。
+    """
+    if not content_text:
+        return content_text
+    # 连同角标前紧邻的空格一起删除，避免"…环境 [1]。"清理后留下"…环境 。"
+    return re.sub(r'[ \t]*[\[【]\s*\d+\s*[\]】]', '', content_text)
+
+
 LANDSCAPE_TABLE_MARKER = "<!-- landscape-table -->"
 WIDE_TABLE_COLUMN_THRESHOLD = 6
 
@@ -1385,7 +1401,8 @@ def create_document(content_text, output_path=None):
     content_text = normalize_content_text(content_text)
     validate_input(content_text)
     content_text = fix_reference_format(content_text)
-    
+    content_text = strip_citation_markers(content_text)
+
     doc = Document()
     
     # 设置 A4 纸张和页边距（公文格式规范）
