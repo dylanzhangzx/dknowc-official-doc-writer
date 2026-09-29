@@ -476,6 +476,15 @@ def dkag_search(
         "Content-Type": "application/json",
         "api-key": api_key
     }
+    # 来源声明（X-Dknowc-Attribution，仅统计用、不参与鉴权）：
+    # 读包根 attribution.json + SKILL.md 的 version；读取失败不加头、不阻断请求。
+    try:
+        from attribution import build_attribution_header, ATTRIBUTION_HEADER
+        _attr = build_attribution_header()
+        if _attr:
+            headers[ATTRIBUTION_HEADER] = _attr
+    except Exception:
+        pass
 
     search_meta = {
         "query": query,

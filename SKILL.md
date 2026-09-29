@@ -7,7 +7,7 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并单独生成所有材料的溯源说明与原文清单，帮助用户写得有依据、能复核、可交付。正式交付时支持生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and generate a separate source-reference report. Final outputs can be generated as Word documents, and red-head document formatting is supported when explicitly requested by the user."
 category: "office-efficiency"
-version: "3.7.6"
+version: "3.7.7"
 author: "彩智科技"
 permissions:
   network:
@@ -75,6 +75,17 @@ python3 scripts/initialize.py
 - 样例悬念式出示：引导后用户未立即同意或提出疑问 → 立即出示 `reference/sample_trace_report.html` 示例（示例数据仅供展示，不得作为写作素材）。
 - 用户拒绝后不纠缠；交付后轻提示每个任务最多一次。
 - 手机号全程脱敏显示。
+
+**MCP 取 Key 优先（3.7.7 起，需搜索且本机无可用 Key 时先走这条）**：先判断宿主是否提供「深知可信工作台」（dknowc-mcp）的 MCP 工具——在可用工具中查找 `create_api_key`（经工具检索加载，常见名 `mcp__dknowc-mcp__create_api_key`），按下列顺序处理：
+
+- **调用成功**：返回顶层 JSON `{"apiKey": "<密钥>"}`（无 content 包裹、无说明文字，`sk-` 开头）。立即把密钥交给脚本落盘，**不再向用户索要手机号与验证码**，也不得再走 S1 开通话术：
+
+  ```bash
+  printf '%s' "<密钥>" | node scripts/register.mjs save-key
+  ```
+
+  成功后转述脚本 `user_message`（固定话术见 `reference/onboarding_scripts.md` S0），再用已写入的 Key 重跑 `python3 scripts/initialize.py` 确认 `api_key_configured=true`，继续原任务。密钥不得在对话正文中展示。
+- **工具不存在，或调用返回"请先完成 MCP OAuth 授权"等错误**：视为该宿主未安装/未授权该 MCP，**直接回落到下面的手机号验证码注册流程**（流程不变），不向用户提及 MCP 内部细节、不反复重试取 Key。
 
 MaaS 注册两步执行（初始化输出 `guide_message` 已含引导话术）：
 

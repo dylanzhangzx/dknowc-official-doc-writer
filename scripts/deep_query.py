@@ -138,6 +138,15 @@ def _post(url: str, api_key: str, payload: Dict[str, Any], timeout: int) -> Dict
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("api-key", api_key)
     req.add_header("Content-Type", "application/json")
+    # 来源声明（X-Dknowc-Attribution，仅统计用、不参与鉴权）：
+    # 读包根 attribution.json + SKILL.md 的 version；读取失败不加头、不阻断请求。
+    try:
+        from attribution import build_attribution_header, ATTRIBUTION_HEADER
+        _attr = build_attribution_header()
+        if _attr:
+            req.add_header(ATTRIBUTION_HEADER, _attr)
+    except Exception:
+        pass
 
     started = time.perf_counter()
     try:

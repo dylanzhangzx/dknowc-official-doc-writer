@@ -2,17 +2,24 @@
 // 国内 MaaS headless 注册助手（供 skillhub skill 调用；纯 node，内置 fetch，无三方依赖）。
 //   node register.mjs [--base URL] send     --phone <p>
 //   node register.mjs [--base URL] register --phone <p> --vcode <c> [--type 6] [--organ ..] [--name ..] [--channel ..] [--source ..] [--password ..] [--new-key]
+//   node register.mjs save-key     # 3.7.7：把 MCP create_api_key 拿到的密钥落盘（stdin 优先，或 --api-key）
 // 无需 cookie / 加密 / 登录态。默认打生产，--base 可切测试环境。
 
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const DEFAULT_BASE = "https://platform.dknowc.cn/auth/home/userAuto";
 const DEFAULT_OPEN_BASE = "https://open.dknowc.cn";
 const DEFAULT_CHANNEL = "8C8D411C-6A46-4E99-887D-87D9A1329930";
 const DEFAULT_TYPE = "6";
-const DEFAULT_SOURCE = "agent";
+// 2026-09-29 调整：与统一来源声明（X-Dknowc-Attribution）的 source 对齐，
+// 不再用旧值 "agent"（与"来源统计最终方案 V1.0"的字段语义冲突）。
+const DEFAULT_SOURCE = "dknowc-official-doc-writer";
 const API_KEY_ENV = "DKNOWC_API_KEY";
 const MAAS_PLATFORM_URL = "https://platform.dknowc.cn/auth/#/login";
 const FALLBACK_REGISTER_URL = MAAS_PLATFORM_URL;
@@ -71,13 +78,35 @@ function parseArgs(argv) {
   return out;
 }
 
+// —— 统一来源声明（X-Dknowc-Attribution，2026-09-29 与开发定稿《来源统计最终方案 V1.0》）——
+// 读包根 attribution.json（kind/source/channel）+ SKILL.md 的 version；仅统计用、
+// 不参与鉴权；读取失败返回 null（不加头、不阻断请求）。
+function buildAttributionHeader() {
+  try {
+    const root = path.resolve(__dirname, "..");
+    const meta = JSON.parse(fs.readFileSync(path.join(root, "attribution.json"), "utf-8"));
+    if (!meta.source) return null;
+    const parts = [`kind=${meta.kind || "skill"}`, `source=${meta.source}`];
+    try {
+      const m = fs.readFileSync(path.join(root, "SKILL.md"), "utf-8").match(/^version:\s*"?([^"\n]+)"?/m);
+      if (m) parts.push(`version=${m[1].trim()}`);
+    } catch {}
+    if (meta.channel) parts.push(`channel=${meta.channel}`);
+    return parts.join(";");
+  } catch { return null; }
+}
+function withAttribution(headers) {
+  const attr = buildAttributionHeader();
+  return attr ? { ...headers, "X-Dknowc-Attribution": attr } : headers;
+}
+
 async function post(url, payload) {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 30000);
   try {
     const r = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: withAttribution({ "Content-Type": "application/json" }),
       body: JSON.stringify(payload),
       signal: ctl.signal,
     });
@@ -95,10 +124,10 @@ async function postWithBearer(url, apiKey, payload) {
   try {
     const r = await fetch(url, {
       method: "POST",
-      headers: {
+      headers: withAttribution({
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify(payload),
       signal: ctl.signal,
     });
@@ -155,6 +184,43 @@ async function main() {
   const a = parseArgs(process.argv.slice(2));
   const base = a.base || DEFAULT_BASE;
   const cmd = a._[0];
+
+  if (cmd === "save-key") {
+    // 3.7.7：MCP 取 Key 路径的落盘子命令。宿主提供 dknowc-mcp 的 create_api_key 且调用
+    // 成功（返回顶层 JSON {"apiKey": "..."}）后，用本命令落盘，用户无需手机号验证码。
+    // 密钥来源优先 stdin（printf '%s' "<密钥>" | node register.mjs save-key，避免出现在
+    // 命令行参数里），其次 --api-key；仅接受 sk- 开头。落盘复用 writeApiKeyToConfigFile
+    // （600 权限 + 清理历史 ~/.zshrc 块），与手机号注册路径同一份持久化逻辑。
+    let apiKey = "";
+    try {
+      if (!process.stdin.isTTY) {
+        const chunks = [];
+        for await (const c of process.stdin) chunks.push(c);
+        apiKey = Buffer.concat(chunks).toString("utf-8");
+      }
+    } catch { /* stdin 读取失败时回退 --api-key */ }
+    if (!apiKey.trim() && a["api-key"] && a["api-key"] !== true) apiKey = String(a["api-key"]);
+    apiKey = apiKey.trim();
+    if (!apiKey.startsWith("sk-") || apiKey.length < 20) {
+      console.log(JSON.stringify({
+        status: false,
+        msg: "密钥格式不符（应为 sk- 开头的 MaaS API Key），请确认调用的是 create_api_key 的返回值",
+      }));
+      process.exit(1);
+    }
+    const w = writeApiKeyToConfigFile(apiKey);
+    console.log(JSON.stringify({
+      status: w.written,
+      envWriteSucceeded: w.written,
+      envWriteTarget: w.path,
+      error: w.error || null,
+      // user_message：给用户的固定话术，Agent 必须原样转述，不得改写后发挥
+      user_message: w.written
+        ? "已通过你的深知可信工作台授权直接开通搜索功能，无需手机号验证，马上开始检索。"
+        : "密钥保存到本机时出现问题，需要改用手机号验证码方式开通。",
+    }));
+    process.exit(w.written ? 0 : 1);
+  }
 
   if (cmd === "send") {
     if (!a.phone) { console.error("缺少 --phone"); process.exit(2); }
