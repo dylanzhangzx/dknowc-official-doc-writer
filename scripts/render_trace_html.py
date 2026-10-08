@@ -336,7 +336,18 @@ def extract_sources(payload: Dict[str, Any]) -> List[Dict[str, str]]:
         # 一篇材料一张卡：段落合并为摘录（paragraph_text 拼接全部段落），不按段落拆卡——
         # 溯源 JSON 的 materials 与正文角标按"材料"粒度一一对应，拆段会使编号错位。
         source = source_from_article(item, len(sources) + 1)
-        key = (source["id"], source["title"], source["url"], source["excerpt"][:80])
+        # 去重键（2026-10-08 修复）：按归一化「标题 + URL」判同一篇，不含 source["id"]——
+        # id 是递增序号、每条都不同，旧键含 id 等于从不去重；可信搜索对同一篇文章按段落
+        # 返回多条片段时会全部出卡（徐总 10-05 实测《医疗保障法》同名卡片重复 17 张的根因）。
+        # 标题或 URL 单独可用时退用其一，均缺失退用摘录前缀。
+        _t = re.sub(r"\s+", "", source["title"] or "")
+        _u = (source["url"] or "").strip().rstrip("/")
+        if _t and _u:
+            key = ("tu", _t, _u)
+        elif _t:
+            key = ("t", _t)
+        else:
+            key = ("x", (source["excerpt"] or "")[:120])
         if key in seen:
             continue
         seen.add(key)
@@ -1414,6 +1425,10 @@ a{color:var(--brand)}
   box-shadow:0 2px 8px rgba(101,18,173,.22)}
 .hero h1{margin:0 0 10px;font-size:24px;line-height:1.5;max-width:860px;margin-left:auto;margin-right:auto;color:var(--ink)}
 .hero .meta{color:var(--muted);font-size:13px;letter-spacing:.5px}
+/* 原问题行（2026-10-08 徐总要求：报告须含完整原问题才能独立使用） */
+.hero .orig-q{margin-top:8px;padding:8px 14px;background:rgba(255,255,255,.72);border:1px solid var(--line);
+  border-radius:10px;color:var(--ink);font-size:13.5px;line-height:1.7;text-align:left}
+.hero .orig-q b{color:var(--brand);margin-right:2px}
 .hero-switch{margin-top:16px;display:flex;justify-content:center}
 .hero-switch .view-switch{border-color:#d9c9f4;background:#fff;box-shadow:0 1px 3px rgba(24,20,40,.04)}
 .hero-switch .view-switch button{color:#70678a;padding:6px 22px;font-size:13px}
@@ -2152,6 +2167,14 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
             jb_tables[key] = html
     doc_title, sections = group_sections(blocks)
     display_title = doc_title or title
+    # 原问题行（2026-10-08 徐总要求：溯源报告须含完整原问题才能独立使用）。
+    # 只认调用方显式传入的 question_override（source_note_html 读溯源 JSON 顶层
+    # question，即 build_trace_json --question 写入的用户原话）——不取 payload 内的
+    # question 字段兜底（该字段历史上常被报告标题冒充，显示了反而误导）；为空或与
+    # 标题相同时不显示该行（历史 JSON 兼容）。
+    question_text = (question_override or "").strip()
+    orig_q_html = (f'<div class="orig-q"><b>原问题</b>：{esc(question_text)}</div>'
+                   if question_text and question_text != display_title else "")
 
     jb_tables_json = json.dumps(jb_tables, ensure_ascii=False).replace("</", "<\\/")
     jb_tables_script = (f'<script type="application/json" id="jb-tables">{jb_tables_json}</script>\n'
@@ -2206,6 +2229,7 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
   <div class="r-badge">溯源核验报告</div>
   <h1>{esc(display_title)}</h1>
   <div class="meta">{esc(meta_line)} ｜ 来源：深知可信搜索</div>
+  {orig_q_html}
   <div class="hero-switch">
     <div class="view-switch" role="tablist" aria-label="视图切换">
       <button class="on" data-view="report" type="button">核验报告</button>

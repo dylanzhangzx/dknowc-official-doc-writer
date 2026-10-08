@@ -7,7 +7,7 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并单独生成所有材料的溯源说明与原文清单，帮助用户写得有依据、能复核、可交付。正式交付时支持生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and generate a separate source-reference report. Final outputs can be generated as Word documents, and red-head document formatting is supported when explicitly requested by the user."
 category: "office-efficiency"
-version: "3.7.7"
+version: "3.7.8"
 author: "彩智科技"
 permissions:
   network:
@@ -99,7 +99,7 @@ node scripts/register.mjs send --phone <手机号>
 node scripts/register.mjs register --phone <手机号> --vcode <验证码> --organ 个人 --name 用户
 ```
 
-成功后转述脚本 `user_message`（额度到账轻确认；`existed=true` 时为老用户找回话术），并按 `envWriteSucceeded` 处理：**为 true** 时脚本已把 Key 写入本机专用配置文件（`~/.config/dknowc/api_key`），直接用返回的 Key 重跑初始化确认后继续原任务；**为 false** 时以脚本返回的 `apiKey` 临时注入环境变量（`DKNOWC_API_KEY=<key> python3 scripts/initialize.py`）完成本次任务，不得据此判定注册失败、不得重复走手机号流程。不得向用户展示完整 Key。默认不重新生成 Key，仅用户明确要求时追加 `--new-key`。注册失败按脚本 `user_message` 处理；连续失败降级引导 `https://platform.dknowc.cn/auth/#/login`。
+成功后转述脚本 `user_message`（积分到账轻确认；`existed=true` 时为老用户找回话术），并按 `envWriteSucceeded` 处理：**为 true** 时脚本已把 Key 写入本机专用配置文件（`~/.config/dknowc/api_key`），直接用返回的 Key 重跑初始化确认后继续原任务；**为 false** 时以脚本返回的 `apiKey` 临时注入环境变量（`DKNOWC_API_KEY=<key> python3 scripts/initialize.py`）完成本次任务，不得据此判定注册失败、不得重复走手机号流程。不得向用户展示完整 Key。默认不重新生成 Key，仅用户明确要求时追加 `--new-key`。注册失败按脚本 `user_message` 处理；连续失败降级引导 `https://platform.dknowc.cn/auth/#/login`。
 
 ## 参考资料（渐进式读取）
 
@@ -243,7 +243,7 @@ python3 scripts/outline_reference.py "用户写作需求" --output outline_任�
 7. 严禁将外省政策作为本省政策依据；政策依据与数据信息严禁使用自由搜索（webSearch）召回的非官方材料，非官方范文与本地 `standards/` 文种标准冲突时以本地标准为准。
 8. 对政策依据、数据支撑、参考案例做充分性自检；研究资料的口径表/纠错记录出现信息缺口（未给出、未确认、多口径未裁决）必须触发补搜，补搜以关键事实闭环为目标、不设次数上限，在已确认方案边界内自动执行并记入研究资料；越界（新地域、换通道）或仍未闭环时停下向用户确认。
 9. **用户确认素材清单后，再基于该清单写作正文**（3.7.5 修复，强制顺序）：正文按 `material_usage_guidance.md` 逐条引用清单材料，**写作时每处引用即标注 `[n]` 角标，n 对应素材清单序号**（先确认清单、边写边标，**禁止写完正文再反查/补标角标**）。正式写作任务不得把正文初稿作为聊天消息发出，直接生成 Word（执行过搜索时另附 HTML 溯源核验报告）。
-10. 执行过搜索时，正式公文正文不再内嵌来源角标、知识专库链接或溯源卡片；必须另行生成 `标题_溯源核验报告.html`，将完整正文写入 HTML，并把正文中的 `[1]`/`【1】`角标变成可点击的来源跳转。报告首屏展示核验报告单（依据溯源、引用对应、材料新旧、材料构成、交付前检查）与过程回顾条；正文中每处依据在句后挂引文胶囊（同段同一材料只保留一次），点击胶囊可展开标题链（文章 › 章 › 节面包屑）、原文摘录与查看全文链接；来源文章按段落分块、各段带自己的标题链，政策文件显示发文字号（接口 policyFiles 匹配）；全部召回材料在知识专库视图按检索分组展示。生成时脚本自动检测原文链接可达性（含软 404 嗅探），失效链接改用接口存档快照（screenShotPath）回看。凡通过深知可信搜索召回并写入正文的依据，默认按已完成可信检索和可溯源处理，不得使用“建议核对”“需人工核验”等削弱可信度的措辞。
+10. 执行过搜索时，正式公文正文不再内嵌来源角标、知识专库链接或溯源卡片；必须另行生成 `标题_溯源核验报告.html`，将完整正文写入 HTML，并把正文中的 `[1]`/`【1】`角标变成可点击的来源跳转。报告顶部展示**用户原始问题全文**（`build_trace_json.py` 装配时用 `--question` 传入用户原话，写入溯源 JSON 顶层 `question`——溯源报告须能脱离对话独立使用，2026-10-08 徐总要求）。报告首屏展示核验报告单（依据溯源、引用对应、材料新旧、材料构成、交付前检查）与过程回顾条；正文中每处依据在句后挂引文胶囊（同段同一材料只保留一次），点击胶囊可展开标题链（文章 › 章 › 节面包屑）、原文摘录与查看全文链接；来源文章按段落分块、各段带自己的标题链，政策文件显示发文字号（接口 policyFiles 匹配）；全部召回材料在知识专库视图按检索分组展示。生成时脚本自动检测原文链接可达性（含软 404 嗅探），失效链接改用接口存档快照（screenShotPath）回看。凡通过深知可信搜索召回并写入正文的依据，默认按已完成可信检索和可溯源处理，不得使用“建议核对”“需人工核验”等削弱可信度的措辞。
 11. 溯源核验报告必须按 `reference/search_guide.md` 的固定流程生成：**用 `scripts/build_trace_json.py` 从"素材清单 + 正文（带角标）"装配溯源 JSON 到 `official-docs/input/标题_溯源核验报告.json`**（3.7.5 修复：materials 按正文角标序对应素材清单、recalled_materials 自动取清单未引用部分 + 合并产物未选部分、self_check 骨架待填），再调用 `python3 scripts/source_note_html.py ...` 输出 HTML。**字段契约（3.7.5 修复）**：溯源 JSON 必须包含 `document_content`（带 `[n]` 角标）、`materials`（全量引用材料，含标准字段）、`recalled_materials`（全部未引用召回材料，不得留空）、`self_check`（五项检查结果如实写入，**每项值写 `"通过：<说明>"` 或 `"未通过：<说明>"` 字符串**——渲染器按字符串解析，写成 dict 会导致核验单五项"未记录"，2026-09-24 实测）；生成 HTML 前必须运行 `python3 scripts/check_materials.py <溯源JSON> <合并产物JSON>` 校验（材料来源可回溯、字段完整、角标一一对应、recalled 非空），**校验通过后才允许调用渲染脚本**。`document_content` 必须在关键结论后标注 `[1]`、`[2]` 等角标并逐条对应 `materials`——脚本会校验，正文无角标时拒绝生成并报错，必须修正 JSON 后重跑，不得省略角标直接交付。不得由模型手写完整 HTML，不得自行拼接 `<a>`、`onclick`、按钮、卡片或页面样式。
 12. 整理 `materials` 时，凡来自深知可信搜索的材料，必须将原始结果中的 `源网址` 原样写入 `source_url`；不得只写规范化后的文章标题，再依赖标题反查网址。若接口未返回 `源网址`，该材料不显示原文链接；不得猜测、补造或用搜索接口地址代替。
 
@@ -416,7 +416,7 @@ python3 scripts/template_generator.py 通知 --input 普通Word文件路径 --or
 
 生成成功后，优先返回正式 `.docx` 文件路径和一句简短说明。执行过搜索并生成溯源核验报告 HTML 时，可同时返回辅助文件路径，但必须明确主文件是正式成稿、溯源核验报告不是正文附件。不要发送 Markdown 草稿、正文初稿、完整正文或中间文件路径。
 
-**宿主环境交付（WorkBuddy、豆包）：** 产出物默认落在 skill 安装目录，宿主通常只展示其工作区文件。**每次交付前一律执行 `python3 scripts/deliver_outputs.py <产出物路径...>`**（不要自行判断是否宿主环境，判断不可靠），按返回 JSON 处理：`copied=true` 向用户展示 delivered 路径（`skipped=identical` 表示目标已有同一份文件；`renamed=true` 表示目标已有同名不同内容的文件，本次另存为"名字 (2)"）；`need_dest=true` 必须补 `--dest <宿主工作区>` 重跑，此前不得把 skill 内部路径当交付路径发给用户。脚本按宿主身份选择对应工作区：**WorkBuddy → `~/WorkBuddy/<时间戳工作区>/outputs/`，豆包 → `~/DoubaoWork/chats/<日期>/<会话>/`（3.7.5 简化决策：仅这两个宿主有明确工作区才复制，其余宿主不做猜测）**。**宿主未识别（非 WorkBuddy / 豆包）时不复制，交付物保留在 skill 输出目录**，向用户展示 skill output 路径。不得为省事手工把产物复制到 `~/WorkBuddy` 等工作区：2026-09-21 豆包任务曾因按"最新 WorkBuddy 工作区"兜底交付，把产物写进用户当天在 WorkBuddy 的测试工作区并同名覆盖其交付物。
+**宿主环境交付（WorkBuddy、豆包）：** 产出物默认落在 skill 安装目录，宿主通常只展示其工作区文件。**每次交付前一律执行 `python3 scripts/deliver_outputs.py <产出物路径...>`**（不要自行判断是否宿主环境，判断不可靠）。**调用方式（2026-10-08 定案）：用 skill 安装目录的绝对路径调用、且本条命令不得先 `cd` 到任何目录**——WorkBuddy 为会话拉起的命令行默认工作目录就是当前会话工作区（`~/WorkBuddy/<时间戳>/`，多次实测证实），保持它不变，脚本即可经 cwd 探测**精确识别当前会话**、零猜测复制；若因先 `cd` 丢失了默认目录，脚本会退回"取最新工作区"的猜测逻辑（多会话并存时会放错，2026-10-05 徐总实测踩到）。**交付前若不确定当前目录，先单独跑一条 `pwd` 确认是会话工作区再调脚本；脚本返回 `method` 非 `workbuddy-cwd:` 时，立即 `pwd` 核对并用 `--dest` 重跑。**按返回 JSON 处理：`copied=true` 向用户展示 delivered 路径（`skipped=identical` 表示目标已有同一份文件；`renamed=true` 表示目标已有同名不同内容的文件，本次另存为"名字 (2)"）；`need_dest=true` 必须补 `--dest <宿主工作区>` 重跑，此前不得把 skill 内部路径当交付路径发给用户。脚本按宿主身份选择对应工作区：**WorkBuddy → `~/WorkBuddy/<时间戳工作区>/outputs/`，豆包 → `~/DoubaoWork/chats/<日期>/<会话>/`（3.7.5 简化决策：仅这两个宿主有明确工作区才复制，其余宿主不做猜测）**。**宿主未识别（非 WorkBuddy / 豆包）时不复制，交付物保留在 skill 输出目录**，向用户展示 skill output 路径。不得为省事手工把产物复制到 `~/WorkBuddy` 等工作区：2026-09-21 豆包任务曾因按"最新 WorkBuddy 工作区"兜底交付，把产物写进用户当天在 WorkBuddy 的测试工作区并同名覆盖其交付物。
 
 如需先把正文落为临时 Markdown 文件供脚本读取，必须在同一工作流中继续生成 `.docx`；不得停在 Markdown 草稿，也不得把 Markdown 文件作为阶段性成果发给用户。只有用户明确要求“先看草稿”“先发 Markdown”“不要生成 Word”时，才可以交付 Markdown 或正文预览。
 

@@ -147,40 +147,11 @@ def load_source_index() -> dict:
 SNAPSHOT_ENABLED = True
 
 
-# 软 404 关键词：政府站常以 HTTP 200 返回"页面不存在"错误页，状态码识别不了，
-# 需读页面标题嗅探。关键词取自实测样例，且仅匹配 <title>（政策正文不会出现在标题里），
-# 误杀风险极低。
-SOFT_404_KEYWORDS = ("页面不存在", "页面未找到", "您访问的页面", "已删除", "已下线", "无法找到", "not found", "404")
-
-
-def check_link_alive(url: str, timeout: int = 8) -> bool:
-    """检测原文链接是否仍然可达。失效判据（客观信号，与请求方无关）：
-    ① HTTP 404/410；② 软 404——HTTP 200 但页面标题为典型失效页。
-    连接失败、超时、403、5xx 等一律视为"无法确认"按有效处理——政府站
-    常对脚本请求反爬，凭这些判死会误杀可用链接。
-    """
-    for method in ("HEAD", "GET"):
-        try:
-            req = urllib.request.Request(
-                url, method=method,
-                headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
-            )
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                if resp.status in (404, 410):
-                    return False
-                if method == "GET":
-                    chunk = resp.read(4096).decode("utf-8", errors="replace")
-                    title = re.search(r"<title>(.*?)</title>", chunk, re.I | re.S)
-                    text = title.group(1) if title else chunk[:200]
-                    lowered = text.lower()
-                    return not any(k in text or k in lowered for k in SOFT_404_KEYWORDS)
-        except urllib.error.HTTPError as e:
-            if method == "GET":
-                return e.code not in (404, 410)
-        except Exception:
-            if method == "GET":
-                return True
-    return True
+# 2026-10-08（徐总 10-06 指示）：链接连通性检测已整体移除——"只要给了链接，就正常给出去"。
+# 原 SOFT_404_KEYWORDS / check_link_alive / mark_dead_links 的 404/410 + 软404 主动探测
+# 会把"暂时打不开"误判为死链并隐藏链接，反而造成徐总 10-05 实测的"被引来源没有任何
+# 可点链接、无法回看原文"。接口自带的 screenShotPath 快照仍作附加回看入口展示（纯展示、
+# 不做网络探测）。
 
 
 def normalize_snapshot_url(url: str) -> str:
@@ -193,18 +164,8 @@ def normalize_snapshot_url(url: str) -> str:
 
 
 def mark_dead_links(articles: list[dict]) -> int:
-    """并发检测全部材料的原文链接，404/410 的标记 链接失效=True。返回失效数。"""
-    targets = [(i, a["源网址"]) for i, a in enumerate(articles) if (a.get("源网址") or "").strip()]
-    if not targets:
-        return 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        alive = dict(zip((i for i, _ in targets), pool.map(check_link_alive, (u for _, u in targets))))
-    dead = 0
-    for i, _ in targets:
-        if not alive.get(i, True):
-            articles[i]["链接失效"] = True
-            dead += 1
-    return dead
+    """已废弃（2026-10-08 徐总指示：不做连通性检测，链接原样给出）。保留空壳仅供旧调用兼容。"""
+    return 0
 
 
 def verify_snapshots(articles: list[dict]) -> int:
@@ -292,7 +253,7 @@ def main() -> None:
     parser.add_argument("input", help="结构化可信溯源 JSON，必须位于 official-docs/input")
     parser.add_argument("--output", "-o", help="输出 HTML 文件名，默认写入 official-docs/output")
     parser.add_argument("--skip-link-check", action="store_true",
-                        help="跳过原文链接活性检测（默认检测：404/410 标记失效）")
+                        help="（已废弃 2026-10-08：链接连通性检测已整体移除，参数保留仅为兼容旧命令）")
     parser.add_argument("--disable-snapshot", action="store_true",
                         help="关闭快照兜底展示（默认启用：原文 404 时以验证过的存档快照替换）")
     args = parser.parse_args()
@@ -303,10 +264,8 @@ def main() -> None:
     data = json.loads(input_path.read_text(encoding="utf-8"))
     payload, title, answer = to_trace_payload(data)
     articles = payload.get("content", {}).get("data", {}).get("检索文章", [])
-    if not args.skip_link_check:
-        dead = mark_dead_links(articles)
-        if dead:
-            print(f"链接检测：{dead} 条原文链接已失效（404/410），将改用存档快照或如实标注")
+    # 2026-10-08：链接连通性检测已移除（徐总 10-06 指示"直接给结果"）——
+    # 接口返回的链接原样进报告；快照仍作附加回看入口（verify_snapshots 仅做本地路径格式校验）。
     if SNAPSHOT_ENABLED:
         dropped = verify_snapshots(articles)
         total = sum(1 for a in articles if (a.get("快照链接") or "").strip())
@@ -320,7 +279,11 @@ def main() -> None:
         raise SystemExit(1)
     output_path = safe_output(args.output, title)
     renderer = load_renderer()
-    rendered = renderer.render_html(payload, title, answer_override=answer, question_override=title)
+    # 2026-10-08（徐总 10-05 人类意见）：溯源报告必须含"完整的原问题"才能独立使用。
+    # 仅取溯源 JSON 顶层的 question（用户原话全文，由 build_trace_json --question 写入）；
+    # 历史 JSON 未带该字段时传空（渲染端不显示该行）——不得用报告标题冒充原问题。
+    question = str(data.get("question") or "").strip()
+    rendered = renderer.render_html(payload, title, answer_override=answer, question_override=question)
     output_path.write_text(rendered, encoding="utf-8")
     print(f"溯源核验报告 HTML 已生成: {output_path}")
 

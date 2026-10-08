@@ -90,7 +90,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 注入或本机专用配置文
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.7.7`。
+当前 skills.sh Public 版基于 `3.7.8`。
 
 检索通道：统一走脚本通道（`deep_query.py` / `dkag_search.py` / `outline_reference.py`，需 API Key）。3.7.5 起不再走 MCP「深知可信工作台」通道——MCP 侧大结果落盘方案改造完成后另行加回。
 

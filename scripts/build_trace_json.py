@@ -151,6 +151,8 @@ def main() -> int:
     parser.add_argument("body_file", nargs="?", help="正文文件（带 [n] 角标）")
     parser.add_argument("merged_json", nargs="?", help="合并产物 JSON（merged_all.json 或 --clean 同构）")
     parser.add_argument("--title", default="", help="报告标题（用于溯源 JSON 的 title 字段）")
+    parser.add_argument("--question", default="", help="用户原始问题全文（写入溯源 JSON 顶层 question；"
+                                                      "溯源报告顶部展示完整原问题，供报告独立使用——2026-10-08 徐总要求）")
     parser.add_argument("--output", "-o", help="输出溯源 JSON 文件名（写入 official-docs/input/）")
     parser.add_argument("--sample", action="store_true", help="打印素材清单示例结构")
     args = parser.parse_args()
@@ -245,6 +247,9 @@ def main() -> int:
 
     trace = {
         "title": args.title or (materials_list.get("task") or "溯源核验报告"),
+        # 2026-10-08：完整原问题（徐总要求——溯源报告须能独立使用）。
+        # 传用户原话全文，不传则留空（渲染层退回报告标题）。
+        "question": (args.question or "").strip(),
         "doc_type": materials_list.get("doc_type", ""),
         "issue_org": materials_list.get("issue_org", ""),
         "publish_date": materials_list.get("publish_date", ""),
