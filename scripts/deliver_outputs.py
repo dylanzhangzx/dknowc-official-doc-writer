@@ -20,15 +20,13 @@ WorkBuddy.app），环境变量与当前目录作为兜底；识别不出时返�
   4. 豆包宿主：~/DoubaoWork/chats/<日期>/<会话> 中最近活跃的会话目录
   5. 宿主未知：当前目录（仅当当前目录不在 skill 目录树内）
   6. 都探测不到（宿主未知且 cwd 在 skill 树内）：不复制，交付物保留在 skill 输出目录
-     （3.7.5 简化决策：仅 WorkBuddy/豆包有明确工作区才复制，其余宿主不做猜测）
+     （仅 WorkBuddy/豆包有明确工作区才复制，其余宿主不做猜测）
 
 注意一：宿主 agent 执行 skill 脚本时当前目录常在 skill 安装目录内，因此不能用
 "当前目录是否等于 skill 目录"判断宿主环境。
 
-注意二（2026-09-21 修复）：**宿主身份未确认时不得写入 ~/WorkBuddy**。原逻辑把
-"~/WorkBuddy 下最新工作区"作为兜底，导致豆包任务（沙箱跑在本机、cwd 在 skill
-目录内）的产物被复制进用户当天在 WorkBuddy 的测试工作区，并因同名覆盖了
-WorkBuddy 那版交付物。宿主未知时宁可不复制。
+注意二：**宿主身份未确认时不得写入 ~/WorkBuddy**。把"~/WorkBuddy 下最新工作区"
+当兜底会在多宿主并存时把产物写错工作区、甚至同名覆盖，宿主未知时宁可不复制。
 
 任何情况下都不会把文件复制到 skill 安装目录自身；也不会覆盖宿主目录中的同名
 文件——内容不同时自动改名为"名字 (2).扩展名"，内容相同则跳过。
@@ -95,7 +93,7 @@ HOST_ENV_VARS = (
     "WORKBUDDY_WORKDIR",
     "WORKBUDDY_PROJECT_DIR",
     "WORKBUDDY_HOME",
-    # 2026-09-23 WorkBuddy 实测补充：宿主实际注入的权威标识是 CODEBUDDY_HOST
+    # WorkBuddy 实际注入的权威环境标识是 CODEBUDDY_HOST
     # （值如 workbuddy-desktop）与 WORKBUDDY_PRODUCT_NAME（值 WorkBuddy）——
     # 此前只查 WORKBUDDY_* 前缀，在 WorkBuddy 下必然识别失败、每次任务都要 --dest。
     "CODEBUDDY_HOST",
@@ -113,7 +111,7 @@ def ancestor_executable_paths(max_depth: int = 10) -> list[str]:
 
     只取可执行路径、不取命令行参数：agent 执行的命令文本里可能出现宿主名
     （例如调试命令里带 ~/WorkBuddy 路径），用整条命令行做关键词匹配会被污染。
-    2026-09-21 实测中，本脚本曾因探测代码自身含 "workbuddy" 字面量，把
+    本脚本曾因探测代码自身含 "workbuddy" 字面量，把
     Cherry Studio 环境误判为 WorkBuddy。
 
     豆包桌面版的进程路径含 DoubaoWork.app，WorkBuddy 含 WorkBuddy.app；
@@ -207,7 +205,7 @@ def doubao_chat_dir() -> tuple[Path | None, list[str]]:
 
     优先用当前目录所在的会话（进程在哪运行就交付到哪，与 WorkBuddy 分支同理、
     并发最可靠）；定位不到时退化为"最近活跃的会话目录"，其 mtime 早于活跃窗口
-    视为无法确定。2026-09-21 修复：此前只看 mtime，实测 cwd 在 new-chat-12
+    视为无法确定。修复：此前只看 mtime，cwd 在 new-chat-12
     时却把产物交付到 new-chat-13——用户在当前会话看不到文件，且交付动作会刷新
     目标目录 mtime，误差在 6 小时窗口内持续粘滞。
     """
@@ -280,7 +278,7 @@ def in_skill_tree(path: Path) -> bool:
 def normalize_host_dest(dest: Path) -> Path:
     """宿主工作区目录归一：目标是 WorkBuddy 时间戳工作区根目录时改用其 outputs/。
 
-    宿主只展示工作区 outputs/ 下的文件。实测（2026-09-21）模型按规则传
+    宿主只展示工作区 outputs/ 下的文件。模型按规则传
     `--dest <工作区目录>` 后产物落在工作区根目录、用户看不到，模型只好手工 cp
     到 outputs/——而规则明令禁止手工复制。此处直接归一，消除这个死循环。
     """
@@ -310,7 +308,7 @@ def detect_dest(explicit_dest: str | None, host: str) -> tuple[Path | None, bool
 
     if host == "workbuddy":
         # 环境变量里宿主注入的本次任务工作区最精确（CODEBUDDY_PROJECT_DIR / CLAUDE_PROJECT_DIR
-        # 直接就是当前任务工作区，2026-09-23 WorkBuddy 实测），优先于"cwd 所在工作区"与
+        # 直接就是当前任务工作区），优先于"cwd 所在工作区"与
         # "最新时间戳"启发式。注意：这两个变量只在 host 已确认 workbuddy 后用于定位工作区，
         # 不作为宿主判定源（CLAUDE_PROJECT_DIR 在本机其他环境也可能存在，避免误判宿主）。
         for proj_name in ("CODEBUDDY_PROJECT_DIR", "CLAUDE_PROJECT_DIR"):
@@ -376,7 +374,7 @@ def copy_without_overwrite(src: Path, dest: Path) -> dict:
     """
     target = dest / src.name
     # is_symlink 单独判定：断链软链接的 exists() 为假，copy2 会顺着链接写到目标之外
-    # （2026-09-21 修复）；同名目标是目录时也要走改名分支，否则 copy2 会写进
+    # 同名目标是目录时也要走改名分支，否则 copy2 会写进
     # "目录/文件名" 并覆盖其中同名文件，绕过"绝不覆盖"的承诺
     occupied = target.is_symlink() or target.exists()
     if occupied:
@@ -482,7 +480,7 @@ def main() -> int:
                 "请用 --dest <本次任务的工作区目录> 重新运行本脚本。")
     elif dest_source == "unknown":
         # 宿主未知（非 WorkBuddy、非豆包）：交付物保留在 skill 输出目录，不复制
-        # （3.7.5 简化决策：不做宿主猜测，用户可自行从 skill output 取文件）
+        # （不做宿主猜测，用户可自行从 skill output 取文件）
         note = (f"未识别宿主环境（非 WorkBuddy / 豆包），交付物保留在 skill 输出目录 {OUTPUT_DIR}，"
                 "不复制到其他位置。")
     elif not files:
@@ -490,7 +488,7 @@ def main() -> int:
         results.append({"copied": False, "error": "没有找到可交付的产出物"})
     elif not args.files and len(files) > 1:
         # 未显式指定文件、且 output 目录里同时有多个近期产物：不猜，要求显式指定
-        # （2026-09-21 修复：此前会把上一任务的产物一起交付，造成串任务）
+        # （此前会把上一任务的产物一起交付，造成串任务）
         note = (f"未指定产出物、且输出目录中有 {len(files)} 个近期文件（{'、'.join(p.name for p in files[:5])}），"
                 "无法确定哪些是本次任务的，已停止复制。请显式传入本次产出物路径后重跑本脚本。")
         results.append({"copied": False, "error": "未指定产出物且有多个近期候选"})
@@ -514,7 +512,7 @@ def main() -> int:
                 continue
             results.append(copy_without_overwrite(src, dest))
         # note 按实际结果生成：交付失败时不得再写"已复制到宿主工作区"
-        # （2026-09-21 修复：模型最可能转述的就是这句自然语言）
+        # （模型最可能转述的就是这句自然语言）
         failed = [r for r in results if not r.get("copied")]
         if host_env and not failed:
             note = (f"宿主环境（{host} / {dest_source}）：产出物已复制到宿主工作区，向用户展示 delivered 路径。"
