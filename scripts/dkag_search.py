@@ -274,7 +274,10 @@ def clean_dkag_response(api_response: dict) -> dict:
                 "文章标题": art.get("文章标题", "无标题"),
                 "发布日期": art.get("发布日期", ""),
                 "数据源": art.get("数据源", "未知来源"),
-                "段落": []
+                "段落": [],
+                # 检索通道标记：本产物来自深知可信搜索（dependable/search）。
+                # 溯源报告据此区分"深度搜索 / 可信搜索"两个接口来源与各自路数。
+                "检索通道": "深知可信搜索",
             }
             for key in ("源网址", "sourceUrl", "source_url", "原文链接", "原文地址", "文章链接", "url", "URL"):
                 if art.get(key):

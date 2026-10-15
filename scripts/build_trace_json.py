@@ -107,6 +107,9 @@ def map_article_fields(art: dict) -> dict:
         "search_key": (first_value(art, ("搜索目的", "purpose"))
                        or first_value(art, SEL_SEARCH_KEY_FIELDS)
                        or "其他检索"),
+        # 检索通道（深知深度搜索 / 深知可信搜索）：由 deep_convert / dkag_search 打标，
+        # 溯源报告据此区分两个接口来源与各自检索路数
+        "检索通道": first_value(art, ("检索通道",)),
     }
 
 
@@ -208,6 +211,11 @@ def main() -> int:
 
     if not materials:
         raise SystemExit("错误：正文没有任何 [n] 角标对应素材清单，请先基于清单写作并标注角标")
+
+    # 按角标号（=素材清单序号）升序重排：渲染层按"位置"给材料编号，只有 materials 处于
+    # 1..N 的 id 顺序时，位置才等于角标号。此前按正文"出现顺序"输出，只要正文首个引用
+    # 不是 [1]（如先引 [23]），胶囊标题与角标号就会整体错位——溯源错配，务必升序。
+    materials.sort(key=lambda m: m["id"])
 
     # ② recalled_materials：清单未引用 + 合并产物未选入 materials 的全部
     used_urls = {norm_key(m.get("source_url", "")).rstrip("/") for m in materials if m.get("source_url")}

@@ -11,7 +11,7 @@
 - 任务路由：`reference/task_router.md` 定义简单任务、常规任务、复杂任务和高风险任务的处理方式。
 - 质量审查：`reference/review_checklist.md` 定义公文内容、可信溯源、文种专项和 Word 输出检查项。
 - Word 排版：通过 `scripts/format_document.py` 生成普通格式 `.docx`，支持标准 Markdown 表格和宽表横向页面。
-- 溯源核验报告：执行过搜索时，通过 `scripts/source_note_html.py` 和 `scripts/render_trace_html.py` 生成独立 HTML 溯源核验报告（句后引文胶囊、知识专库分组视图、章节引用徽章；生成时自动检测原文链接可达性并支持存档快照兜底）。
+- 产出物 HTML：执行过搜索时，通过 `scripts/source_note_html.py` 和 `scripts/render_trace_html.py` 生成单文件产出物 HTML（顶部切换 **正文（去索引） / 溯源核验报告 / 知识专库** 三页）：正文页为干净正式正文（与 Word 正文一致）；溯源核验报告页含 **AI 自验收**（过程回顾条）、核验单与带角标的正文（角标为可点击引文胶囊）；知识专库页按检索分组展示来源材料；原文链接原样给出、附存档快照兜底。顶栏「导出」可导出正文 Markdown（.md）或 PDF（正文 / 溯源核验报告）。文件名按用户需求（正文标题）生成，形如 `XXX.html`。
 - 已有 Word 审查：通过 `scripts/review_document.py` 只读提取已有 `.docx` 的格式信息和待核验事实表述。
 - 红头文件：通过 `scripts/template_generator.py` 代码化生成红头和表尾，不依赖 `templates/` 中的 Word 模板。
 - 个人素材库与写作偏好：`scripts/local_memory.py` 管理本机私有素材库与偏好（不随公开包分发）。
@@ -92,9 +92,18 @@ https://open.dknowc.cn/dependable/search/
 
 API Key 只能通过环境变量 `DKNOWC_API_KEY` 注入或本机专用配置文件（`~/.config/dknowc/api_key`）持久化，不得硬编码，不得写入公开包。脚本读取顺序为进程环境变量优先、缺失时自动读取配置文件，历史 `~/.zshrc` 中的 Key 块仅作迁移期兜底，无需重启宿主。
 
+## 交付形态
+
+交付形态由两个独立开关决定（详见 `reference/task_router.md`）：
+
+- **是否命中文公文范式** → 决定要不要 Word：命中 15 种法定公文（决议、决定、命令、公报、公告、通告、意见、通知、通报、报告、请示、批复、议案、函、纪要，含复函与提醒函）时生成 `.docx`；用户明确要求 Word/红头时也生成 Word。
+- **是否执行过深知搜索** → 决定要不要产出物 HTML：只要用过深知可信搜索或深度搜索，就生成单文件产出物 HTML（正文 / 溯源核验报告 / 知识专库 三页）。
+
+两者可同时成立。非公文且执行过搜索时，交付产出物 HTML 并询问用户是否需要另出 Word。
+
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.7.9`。
+当前 skills.sh Public 版基于 `3.8.1`。
 
 检索通道：统一走脚本通道（`deep_query.py` / `dkag_search.py` / `outline_reference.py`，需 API Key）。3.7.5 起不再走 MCP「深知可信工作台」通道——MCP 侧大结果落盘方案改造完成后另行加回。
 
