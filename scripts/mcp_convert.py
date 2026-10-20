@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""把 MCP「深知可信工作台」trusted_search（include_details=true 形态）的返回
+"""⚠ 本脚本自 3.7.5 起随 MCP 通道一同停用，仅保留待 MCP 侧落盘方案改造完成后恢复。
+
+现行检索统一走纯脚本通道，规则层（SKILL.md / reference）不引用本脚本；
+以下为停用前的机制说明，仅供恢复改造时参考。
+
+--------------------------------------------------------------------------------
+把 MCP「深知可信工作台」trusted_search（include_details=true 形态）的返回
 转换成与深知可信搜索脚本 `scripts/dkag_search.py --clean` **完全同构**的形态，
 供本 Skill 全部下游流程复用。
 
