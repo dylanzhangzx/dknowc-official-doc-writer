@@ -349,7 +349,7 @@ def detect_dest(explicit_dest: str | None, host: str) -> tuple[Path | None, bool
         return dest, True, "cwd", False, []
 
     # 宿主身份未知：不复制、不要求 --dest，交付物保留在 skill 输出目录
-    # （3.7.5 简化决策：仅 WorkBuddy/豆包有明确工作区才复制，其余宿主留在 skill output）
+    # （3.7.5 起：仅 WorkBuddy/豆包有明确工作区才复制，其余宿主留在 skill output）
     if host == "unknown":
         return None, False, "unknown", False, doubao_candidates
 

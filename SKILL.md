@@ -7,7 +7,7 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并生成含正文、溯源核验报告与知识专库的产出物，帮助用户写得有依据、能复核、可交付。正式公文（15 种法定文种）可生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and produce a deliverable containing the formal content, a source-verification report and a knowledge-library view. Word documents are generated for the 15 statutory official-document types, and red-head document formatting is supported when explicitly requested by the user."
 category: "office-efficiency"
-version: "3.8.2"
+version: "3.8.3"
 author: "彩智科技"
 permissions:
   network:
@@ -65,14 +65,14 @@ python3 scripts/initialize.py
 
 只有任务确实需要深知搜索（需要政策依据、数据支撑、案例参考，或用户明确要求查最新政策、最新情况、权威数据）时，API Key 才是前置条件。初始化结果显示 `api_key_configured=false`、`search_ready=false` 或 `search_blocking_issues` 包含 `api_key_missing` 时，暂停原任务，按引导规则向用户说明并引导开通。
 
-引导与注册各环节的固定话术（S1 引导开通 / 索要手机号 / 验证码已发送与验证链接两分支 / "验证好了"追问 / 验证码错误 / 开通成功含积分与密钥准备中 / 报错 / FAQ）统一见 `reference/onboarding_scripts.md`，按场景取用、要素不可删改。脚本输出含 `user_message` 字段时**必须原样转述**。
+引导与注册各环节的固定话术（S1 引导开通 / 索要手机号 / 验证码已发送与验证链接两分支 / "验证好了"追问 / 验证码错误 / 开通成功含积分与密钥准备中 / 报错 / FAQ）统一见 `reference/onboarding_scripts.md`，按场景取用、**事实要素不可增删**（权益数字、验证码、链接、账号注册与凭证本机保存的事实）。脚本输出含 `user_message` 字段时，其中事实信息与数字必须原样保留、不得改写；措辞可按对话上下文自然调整。
 
 硬规则：
 
 - **引导前禁示**：在用户确认开通或明确拒绝之前，不得输出任何"已核实 / 已查到 / 均为官网原文"类政策内容。需要搜索的材料，政策依据只能来自真实深知检索或"待补"标注，禁止用模型自身知识冒充检索结果。
 - 先价值、后验证：先让用户理解搜索对当前材料的价值与开通权益（注册赠送 10 万积分 + 实名认证再送 10 万积分，在 S1 一并告知），再提手机号；不得开口就要手机号。引导时机后置：优先在搜索方案确认后再引导。
 - 退路只有"标待补继续写"一种，禁止承诺"用联网检索替代、同样可溯源"。
-- 不向用户暴露内部术语（MaaS、API Key、环境变量名、脚本名、渠道码）；用户侧只说"开通搜索功能"。
+- 不向用户暴露内部术语（MaaS、API Key、环境变量名、脚本名、渠道码）；用户侧只说"开通搜索功能"。**但不得隐瞒事实**：索要手机号前必须明确告知"将用该手机号完成账号注册，并在本机保存一份检索凭证（仅存本机配置文件，不上传、不外传）"；验证码由用户本人接收并输入，不得代输；用户追问时如实说明。
 - 样例悬念式出示：引导后用户未立即同意或提出疑问 → 立即出示 `reference/sample_trace_report.html` 示例（示例数据仅供展示，不得作为写作素材）。
 - 用户拒绝后不纠缠；交付后轻提示每个任务最多一次。
 - 手机号全程脱敏显示。

@@ -22,8 +22,10 @@ import html
 import json
 import re
 from datetime import datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 
 # ============================================================
@@ -32,6 +34,27 @@ from typing import Any, Dict, List, Optional, Tuple
 
 def esc(value: Any) -> str:
     return html.escape(str(value or ""), quote=True)
+
+
+def safe_url(value: Any) -> str:
+    """外链协议白名单：仅放行 http/https，其余（javascript:/data:/file: 等）返回空串。
+
+    3.8.3 起所有 href 一律经由本函数，非法协议链接不渲染（防点击执行）。
+    """
+    url = str(value or "").strip()
+    if not url:
+        return ""
+    try:
+        scheme = urlsplit(url).scheme.lower()
+    except ValueError:
+        return ""
+    return url if scheme in ("http", "https") else ""
+
+
+def dumps_for_script(obj: Any) -> str:
+    """嵌入 <script type="application/json"> 的序列化：补全字符级转义防注入。"""
+    s = json.dumps(obj, ensure_ascii=False)
+    return s.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
 def load_json(path: Path) -> Dict[str, Any]:
@@ -662,21 +685,77 @@ def render_markdown_table(lines: List[str], citation_repl) -> str:
     return f'<div class="tbl-wrap"><table class="data-tbl"><thead><tr>{head_html}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
 
 
+_TABLE_ALLOWED_TAGS = {"table", "thead", "tbody", "tr", "td", "th", "br"}
+_TABLE_VOID_TAGS = {"br"}
+_TABLE_SKIP_CONTENT_TAGS = {"script", "style"}
+
+
+class _TableSanitizer(HTMLParser):
+    """表格 HTML 元素级白名单（3.8.3 起替代正则清洗，防标签注入与属性注入）：
+
+    - 只放行 table/thead/tbody/tr/td/th/br，输出不带任何属性；
+    - 其余标签一律丢弃（文本继续走 handle_data，统一转义）；
+    - script/style 连内容一起丢弃；
+    - 乱序/未闭合标签按栈自平衡，不产生悬空标签；
+    - 解析异常由调用方兜底为整体转义。
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.out: List[str] = []
+        self.stack: List[str] = []
+        self.skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        tag = tag.lower()
+        if tag in _TABLE_SKIP_CONTENT_TAGS:
+            self.skip_depth += 1
+            return
+        if self.skip_depth or tag not in _TABLE_ALLOWED_TAGS:
+            return
+        if tag in _TABLE_VOID_TAGS:
+            self.out.append("<br>")
+            return
+        self.out.append(f"<{tag}>")
+        self.stack.append(tag)
+
+    def handle_startendtag(self, tag: str, attrs) -> None:
+        self.handle_starttag(tag, attrs)
+        self.handle_endtag(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag in _TABLE_SKIP_CONTENT_TAGS:
+            self.skip_depth = max(0, self.skip_depth - 1)
+            return
+        if self.skip_depth or tag not in _TABLE_ALLOWED_TAGS or tag in _TABLE_VOID_TAGS:
+            return
+        if tag in self.stack:
+            while self.stack:
+                top = self.stack.pop()
+                self.out.append(f"</{top}>")
+                if top == tag:
+                    break
+
+    def handle_data(self, data: str) -> None:
+        if not self.skip_depth:
+            self.out.append(html.escape(data, quote=False))
+
+    def close(self) -> None:
+        super().close()
+        while self.stack:
+            self.out.append(f"</{self.stack.pop()}>")
+
+
 def sanitize_table_html(text: str) -> str:
-    """清洗接口表格 HTML：仅保留 table/thead/tbody/tr/td/th/br，去脚本样式与属性。"""
-    cleaned = re.sub(r"(?is)<script.*?</script>", "", text)
-    cleaned = re.sub(r"(?is)<style.*?</style>", "", cleaned)
-    cleaned = re.sub(r"\s+on\w+\s*=\s*(['\"]).*?\1", "", cleaned)
-    cleaned = re.sub(r"\s+(href|src)\s*=\s*(['\"]).*?\2", "", cleaned)
-    allowed = {"table", "thead", "tbody", "tr", "td", "th", "br"}
-
-    def tag_repl(match: re.Match[str]) -> str:
-        closing, name = match.group(1), match.group(2).lower()
-        if name not in allowed:
-            return ""
-        return f"<{closing}{name}>"
-
-    return re.sub(r"<\s*(/?)\s*([a-zA-Z0-9]+)(?:\s+[^>]*)?>", tag_repl, cleaned)
+    """清洗接口表格 HTML：只保留表格结构标签，属性丢弃、文本转义、脚本样式连内容丢弃。"""
+    parser = _TableSanitizer()
+    try:
+        parser.feed(str(text or ""))
+        parser.close()
+    except Exception:  # 解析异常兜底：整体转义，宁可不渲染表格
+        return html.escape(str(text or ""), quote=False)
+    return "".join(parser.out)
 
 
 def render_excerpt_html(text: str) -> str:
@@ -698,9 +777,10 @@ def parse_answer_blocks(answer: str, valid_ids: set, chip_map: Optional[Dict[str
         jb = chip_map.get(cid)
         if not jb:
             return ""
-        if jb.get("url"):
+        jb_url = safe_url(jb.get("url"))
+        if jb_url:
             btn_txt = "查看存档全文" if jb.get("dead") else "查看全文"
-            link = (f'<a class="jb-src" href="{esc(jb["url"])}" target="_blank" rel="noopener noreferrer">'
+            link = (f'<a class="jb-src" href="{esc(jb_url)}" target="_blank" rel="noopener noreferrer">'
                     f'{ARROW_SVG}<span>{btn_txt}</span></a>')
         else:
             link = ""
@@ -891,6 +971,9 @@ def build_chip_data(sources: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
 def render_source_links(url: str, policy_url: str = "", snapshot: str = "", link_dead: bool = False) -> str:
     """链接区四态：原文可回看 / 原文失效改快照 / 原文失效无快照 / 无源网址有快照。
     快照是接口对原文的存档副本，文案如实标注，不冒充原文链接。"""
+    url = safe_url(url)
+    snapshot = safe_url(snapshot)
+    policy_url = safe_url(policy_url)
     links = []
     if url and url != "接口未返回" and not link_dead:
         links.append(f'<a href="{esc(url)}" target="_blank" rel="noopener">查看全文 ↗</a>')
@@ -1030,7 +1113,7 @@ CARET_SVG = ('<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke
 def render_src_card(jb: Dict[str, str], cid: str, dup: bool = False) -> str:
     """句后溯源卡（原型 cardHTML 的 Python 移植）：标题 + 来源 + 查看原文 + 摘录展开。"""
     src = jb.get("source") or "来源站点"
-    url = jb.get("url") or ""
+    url = safe_url(jb.get("url") or "")
     title = re.sub(r"<br\s*/?>", " ", str(jb.get("title") or ""), flags=re.I)
     excerpt = (jb.get("excerpt") or "").strip()
     dup_cls = " dup-card" if dup else ""
@@ -2165,12 +2248,12 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
     orig_q_html = (f'<div class="orig-q" title="{esc(question_text)}"><b>原问题</b>：{esc(question_text)}</div>'
                    if question_text and question_text != display_title else "")
 
-    jb_tables_json = json.dumps(jb_tables, ensure_ascii=False).replace("</", "<\\/")
+    jb_tables_json = dumps_for_script(jb_tables)
     jb_tables_script = (f'<script type="application/json" id="jb-tables">{jb_tables_json}</script>\n'
                         if jb_tables else "")
     # 导出用正文 Markdown（去角标，干净正文），供顶部"导出 ▾ → 导出正文 Markdown"下载
     export_payload = {"title": display_title, "markdown": strip_citation_markers(answer)}
-    export_json = json.dumps(export_payload, ensure_ascii=False).replace("</", "<\\/")
+    export_json = dumps_for_script(export_payload)
     export_script = f'<script type="application/json" id="doc-export">{export_json}</script>\n'
 
     meta_bits = []
