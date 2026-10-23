@@ -286,3 +286,72 @@ python3 scripts/template_generator.py 通知 \
 - 内容具体：包含具体的工作举措
 - 语言规范：使用书面语，用词准确
 - 格式标准：符合公文格式要求
+
+
+---
+
+# 附：Word 输出与产出物交付（自 SKILL.md 迁入）
+
+
+
+## 产出物 HTML（正文 / 溯源核验报告 / 知识专库）
+
+溯源 JSON 按 `reference/materials_pipeline.md` 装配并通过 `check_materials.py` 校验后，调用：
+
+```bash
+python3 scripts/source_note_html.py official-docs/input/标题_溯源核验报告.json
+```
+
+输出单文件 `XXX.html`（三页切换）。正文页只放干净正式内容；溯源核验报告页承载角标、引文胶囊、核验单；知识专库页展示全部召回材料。不得由模型手写完整 HTML，不得自行拼接 `<a>`、`onclick`、按钮、卡片或页面样式。交付前按上文 `deliver_outputs.py` 规则执行。
+
+
+## 产出物 HTML 内容规则（完整版）
+
+10. 执行过搜索时，必须另行生成**产出物 HTML**（`XXX.html`，文件名按用户需求确定；单文件顶部切换 **正文 / 溯源核验报告 / 知识专库** 三页）。**正文页只放干净正式内容**（与 Word 正文一致，不带任何角标、素材清单、知识专库链接或 URL）；**溯源核验报告页**展示**用户原始问题全文**（`build_trace_json.py` 装配时用 `--question`（多行/长 prompt 先落盘，改用 `--question-file`）传入用户原话全文，禁止只传首行，写入溯源 JSON 顶层 `question`，使报告可脱离对话独立使用）、过程回顾条、核验报告单（依据溯源、引用对应、材料新旧、材料构成（按内容类型）、交付前检查），并重排**带 `[n]` 角标的正文**——核验内容（角标、引文胶囊、章节引用徽章）只出现在此页：正文中的 `[1]`/`【1】`角标变成可点击的来源跳转（引文胶囊，同段同一材料只保留一次；点击胶囊可展开标题链「文章 › 章 › 节面包屑」、原文摘录与查看全文链接）；**知识专库页**按检索分组展示全部召回材料（来源文章按段落分块、各段带自己的标题链，所有段落全量展示、不做展开/收起折叠，政策文件显示发文字号）。接口返回的原文链接原样给出、不做连通性检测；接口附带的存档快照（screenShotPath）作为附加回看入口。凡通过深知可信搜索召回并写入正文的依据，默认按已完成可信检索和可溯源处理，不得使用“建议核对”“需人工核验”等削弱可信度的措辞。
+
+
+---
+
+## Word 输出
+
+首次使用或用户要求检查环境时：
+
+```bash
+python3 scripts/initialize.py
+```
+
+如果 `python3` 不可运行，或初始化结果显示 `ready=false`、`python_docx=false`、`requests=false`，必须先暂停（依赖缺失处理见"工作原则"）。API Key 按需前置：不需要搜索的任务即使未配置 Key 也可正常生成 Word；需要搜索的任务按"启动初始化"的注册流程处理。
+
+用户明确授权保存常用设置时，才执行：
+
+```bash
+python3 scripts/initialize.py --organization "用户提供的单位" --doc-prefix "用户提供的前缀" --region "用户提供的地域" --save
+```
+
+需要生成 Word 时，正文必须使用 `reference/output_guide.md` 支持的 Markdown 格式。
+
+普通 Word：
+
+```bash
+python3 scripts/format_document.py official-docs/input/official_doc_content.txt
+```
+
+调用前先把正文写入本 Skill 工作目录下的 `official-docs/input/` 临时正文文件。默认保存到 `config/format.json` 的 `output.dir`，且输出只能位于 `official-docs/output/`；脚本默认从正文标题生成正式文件名，并在同名文件已存在时追加 `_v1`、`_v2`。如用户明确要求保存文件名，可传入 `--output 文件名.docx`。只有一句话以内的极短文本才允许使用 `--text`；多行正文不得直接通过命令行参数传入，避免换行被破坏后整篇文档变成一个段落。
+
+红头 Word：
+
+```bash
+python3 scripts/template_generator.py 通知 --input 普通Word文件路径 --org "发文机关" --doc-number "发文字号"
+```
+
+红头脚本只能在用户明确要求红头时调用。用户只要求“生成 Word”“正式 Word”“排版文件”时，不调用红头脚本。
+
+当前版本不支持自动生成 PDF，也不提供 PDF 转换命令。用户明确要求 PDF 时，生成正式 `.docx` 或红头 `.docx` 后，提示用户使用本机 Word/WPS 的“另存为 PDF”或“导出 PDF”功能完成转换；不得声称已生成 PDF。
+
+生成成功后，按本次判定返回产物路径和一句简短说明：命中公文范式返回 `.docx` 路径；执行过搜索返回产出物 HTML（`XXX.html`）路径。两者都有时，以正式成稿（Word）为主文件、产出物 HTML 为含溯源与知识专库的辅助文件（其正文页即正式内容），并向用户说明二者关系。不要发送 Markdown 草稿、正文初稿、完整正文或中间文件路径。
+
+**宿主环境交付（WorkBuddy、豆包）：** 产出物默认落在 skill 安装目录，宿主通常只展示其工作区文件。**每次交付前一律执行 `python3 scripts/deliver_outputs.py <产出物路径...>`**（不要自行判断是否宿主环境，判断不可靠）。**调用方式：用 skill 安装目录的绝对路径调用、且本条命令不得先 `cd` 到任何目录**——WorkBuddy 为会话拉起的命令行默认工作目录就是当前会话工作区（`~/WorkBuddy/<时间戳>/`），保持它不变，脚本即可经 cwd 探测**精确识别当前会话**、零猜测复制；若因先 `cd` 丢失了默认目录，脚本会退回"取最新工作区"的猜测逻辑（多会话并存时会放错）。**交付前若不确定当前目录，先单独跑一条 `pwd` 确认是会话工作区再调脚本；脚本返回 `method` 非 `workbuddy-cwd:` 时，立即 `pwd` 核对并用 `--dest` 重跑。**按返回 JSON 处理：`copied=true` 向用户展示 delivered 路径（`skipped=identical` 表示目标已有同一份文件；`renamed=true` 表示目标已有同名不同内容的文件，本次另存为"名字 (2)"）；`need_dest=true` 必须补 `--dest <宿主工作区>` 重跑，此前不得把 skill 内部路径当交付路径发给用户。脚本按宿主身份选择对应工作区：**WorkBuddy → `~/WorkBuddy/<时间戳工作区>/outputs/`，豆包 → `~/DoubaoWork/chats/<日期>/<会话>/`（仅这两个宿主有明确工作区才复制，其余宿主不做猜测）**。**宿主未识别（非 WorkBuddy / 豆包）时不复制，交付物保留在 skill 输出目录**，向用户展示 skill output 路径。不得为省事手工把产物复制到 `~/WorkBuddy` 等工作区（曾发生按"最新工作区"兜底交付、把产物写进用户另一宿主工作区并覆盖其同名文件的事故）。
+
+如需先把正文落为临时 Markdown 文件供脚本读取，必须在同一工作流中继续生成 `.docx`；不得停在 Markdown 草稿，也不得把 Markdown 文件作为阶段性成果发给用户。只有用户明确要求“先看草稿”“先发 Markdown”“不要生成 Word”时，才可以交付 Markdown 或正文预览。
+
+对“写一份/起草/生成/整理/形成/润色/改写……”等所有正式写作任务，先按 `reference/task_router.md` 的两个开关判定交付形态：命中 15 种法定公文（含复函、提醒函）→ 生成 Word；执行过搜索 → 生成产出物 HTML（`XXX.html`，正文 / 溯源核验报告 / 知识专库 三页）；两者可同时成立。不得因为用户未写“Word”就先把正文粘贴到聊天窗口，也不得把非公文任务一律产出 Word。

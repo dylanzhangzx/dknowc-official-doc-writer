@@ -87,7 +87,7 @@ https://platform.dknowc.cn/auth/#/login
 搜索接口固定为：
 
 ```text
-https://open.dknowc.cn/dependable/search/
+https://open.dknowc.cn/open-api/maas/dependable/v2/search
 ```
 
 API Key 只能通过环境变量 `DKNOWC_API_KEY` 注入或本机专用配置文件（`~/.config/dknowc/api_key`）持久化，不得硬编码，不得写入公开包。脚本读取顺序为进程环境变量优先、缺失时自动读取配置文件，历史 `~/.zshrc` 中的 Key 块仅作迁移期兜底，无需重启宿主。
@@ -103,7 +103,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 注入或本机专用配置文
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.8.3`。
+当前 skills.sh Public 版基于 `3.9.0`。
 
 检索通道：统一走脚本通道（`deep_query.py` / `dkag_search.py` / `outline_reference.py`，需 API Key）。3.7.5 起不再走 MCP「深知可信工作台」通道——MCP 侧大结果落盘方案改造完成后另行加回。
 

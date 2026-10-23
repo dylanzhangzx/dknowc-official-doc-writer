@@ -101,6 +101,13 @@ def map_article_fields(art: dict) -> dict:
         "发布日期": first_value(art, ("发布日期", "date", "日期")),
         "发布日期可信度": first_value(art, ART_CONFIDENCE_FIELDS),
         "快照链接": first_value(art, ART_SNAPSHOT_FIELDS),
+        # V2 新增文章级字段（D5）：文号优先取文章级「发文字号」
+        "发文字号": first_value(art, ("发文字号", "文号")),
+        "生效日期": first_value(art, ("生效日期", "effectiveDate")),
+        "失效日期": first_value(art, ("失效日期", "expiryDate")),
+        "文章类型": first_value(art, ("文章类型", "type")),
+        "发布或实施机构": first_value(art, ("发布或实施机构", "发布机关")),
+        "文件标签": first_value(art, ("文件标签",)),
         # search_key：知识专库分组胶囊的依据，必须用"搜索目的"（真实搜索路数，如
         # "查找两地现行人才落户政策…"），不能用 deep_group/搜索地域（那是服务端子查询
         # 或地域组合，会把 7 路真实搜索展成几十个碎片胶囊）。
@@ -156,6 +163,8 @@ def main() -> int:
     parser.add_argument("--title", default="", help="报告标题（用于溯源 JSON 的 title 字段）")
     parser.add_argument("--question", default="", help="用户原始问题全文（写入溯源 JSON 顶层 question；"
                                                       "溯源报告顶部展示完整原问题，供报告独立使用）")
+    parser.add_argument("--question-file", help="用户原始问题全文文件（多行/长 prompt 优先用此参数，"
+                                                "避免只传首行导致溯源报告原问题被截断）")
     parser.add_argument("--output", "-o", help="输出溯源 JSON 文件名（写入 official-docs/input/）")
     parser.add_argument("--sample", action="store_true", help="打印素材清单示例结构")
     args = parser.parse_args()
@@ -174,6 +183,13 @@ def main() -> int:
         raise SystemExit("用法：python3 scripts/build_trace_json.py <素材清单> <正文文件> <合并产物JSON> --title <标题> --output <溯源JSON>")
 
     materials_list = load_json(Path(args.materials_list).expanduser())
+    question_text = (args.question or "").strip()
+    if args.question_file:
+        question_path = Path(args.question_file).expanduser()
+        try:
+            question_text = question_path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise SystemExit(f"错误：无法读取 --question-file {question_path}（{exc}）")
     body_path = Path(args.body_file).expanduser()
     body = body_path.read_text(encoding="utf-8")
     merged = load_json(Path(args.merged_json).expanduser())
@@ -257,7 +273,7 @@ def main() -> int:
         "title": args.title or (materials_list.get("task") or "溯源核验报告"),
         # 2026-10-08：完整原问题（溯源报告须能独立使用）。
         # 传用户原话全文，不传则留空（渲染层退回报告标题）。
-        "question": (args.question or "").strip(),
+        "question": question_text,
         "doc_type": materials_list.get("doc_type", ""),
         "issue_org": materials_list.get("issue_org", ""),
         "publish_date": materials_list.get("publish_date", ""),
@@ -265,6 +281,12 @@ def main() -> int:
         "materials": materials,
         "recalled_materials": recalled,
         "self_check": self_check,
+        # 用户明确字数要求时由素材清单传入（如 {"min": 4000, "max": 5000}）；
+        # 缺省时 check_materials 按 3500–5000 锚点校验。
+        "length_target": materials_list.get("length_target"),
+        # 逐次调用记录（来自合并产物 search_summary）：过程条按真实调用次数
+        # 统计"深度搜索 N 路 / 可信补搜 M 次"，不受同 purpose 分组影响。
+        "检索记录": (merged.get("search_summary") or {}).get("searches") or [],
     }
 
     out_path = args.output

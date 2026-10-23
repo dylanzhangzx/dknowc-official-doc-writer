@@ -105,11 +105,14 @@ def merge_results(result_files: List[str]) -> Dict:
         search_meta = data.get("search_meta", {})
         region = search_meta.get("area") or infer_region_from_filename(str(safe_file_path))
         regions_searched.append(region)
+        # 本文件处理前的文章/段落基线：用于计算每次调用真实新增量
+        before_article_count = len(all_articles)
+        before_para_total = sum(len(a.get("段落") or []) for a in all_articles)
         # 搜索目的兜底（3.7.6 修复）：该路 --purpose 为空时用该路 query 兜底——
         # 若留空，文章"搜索目的"缺失，溯源报告分组键（search_key）会退化成
         # "中国"/"浙江省"等地域碎片，材料面板筛选胶囊失去意义（曾出现 75/295 篇退化）。
         purpose_val = search_meta.get("purpose") or search_meta.get("query") or ""
-        searches.append({
+        record = {
             "file": str(safe_file_path),
             "query": search_meta.get("query", ""),
             "purpose": purpose_val,
@@ -119,7 +122,13 @@ def merge_results(result_files: List[str]) -> Dict:
             "full": search_meta.get("full", False),
             "segmentCount": search_meta.get("segmentCount"),
             "knowledgeBase": data.get("knowledgeBase", ""),
-        })
+            # 调用通道：深搜转换产物自带 channel=deep；补搜文件按文件名区分（deep_* vs 其他）
+            "channel": ("深知深度搜索"
+                        if (data.get("channel") == "deep"
+                            or Path(str(safe_file_path)).name.startswith("deep_"))
+                        else "深知可信搜索"),
+        }
+        searches.append(record)
         if data.get("knowledgeBase"):
             knowledge_bases.append({
                 "file": str(safe_file_path),
@@ -209,6 +218,13 @@ def merge_results(result_files: List[str]) -> Dict:
             if article.get("policyUrl") and not article.get("知识专库原文"):
                 article["知识专库原文"] = article["policyUrl"]
             all_articles.append(article)
+
+        # 每次调用的真实增量：新增文章数 / 新增段落数（含新文章自带段落）。
+        # 补搜的价值主要看这两个数：新增 0 篇但补充 N 段，说明补的是已有文章的条款段落。
+        record["new_articles"] = len(all_articles) - before_article_count
+        record["added_paragraphs"] = (
+            sum(len(a.get("段落") or []) for a in all_articles) - before_para_total
+        )
 
     # —— 近似重复去重（句子指纹，2026-10-14 修复"段落重复"问题）——
     # 搜索接口对同一篇文章常返回多个标题变体条目（如"北京出台智能体专项政策"与

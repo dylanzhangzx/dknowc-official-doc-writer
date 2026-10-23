@@ -103,8 +103,11 @@ def normalize_kb_label(label):
 
 
 def is_internal_search_endpoint(url):
-    """识别深知搜索接口地址，避免误当成知识专库链接输出。"""
-    return "open.dknowc.cn/dependable/search" in url
+    """识别深知搜索接口地址（V1 历史数据 / V2 生产入口），避免误当成知识专库链接输出。"""
+    return any(part in url for part in (
+        "open.dknowc.cn/dependable/search",
+        "open-api/maas/dependable/v2/search",
+    ))
 
 
 def is_generic_kb_label(text):

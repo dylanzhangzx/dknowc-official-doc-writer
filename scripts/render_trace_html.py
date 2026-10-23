@@ -287,8 +287,14 @@ def source_from_article(item: Dict[str, Any], index: int, segment: Optional[Dict
     first_chain = segments[0]["chain"][1:] if segments else []
     source["doc_section"] = " › ".join(first_chain)
     source["chain_full"] = " › ".join(segments[0]["chain"]) if segments else ""
-    # 发文字号（接口 policyFiles.writtenText，本地标题匹配）
-    source["doc_number"] = first_str(item.get("文号"), item.get("doc_number"))
+    # 发文字号：V2 起优先文章级「发文字号」；历史数据回退 policyFiles 匹配的「文号」
+    source["doc_number"] = first_str(item.get("发文字号"), item.get("文号"), item.get("doc_number"))
+    # D5②：生效/失效日期与文章类型（知识专库卡片 meta 展示；无值不显示）
+    source["effective_date"] = first_str(item.get("生效日期"), item.get("effectiveDate"))
+    source["expiry_date"] = first_str(item.get("失效日期"), item.get("expiryDate"))
+    _atype = first_str(item.get("文章类型"))
+    source["article_type"] = {"policy": "政策文件", "govSite": "政府网站",
+                              "affair": "办事事项", "qa": "问答"}.get(_atype, _atype)
     # 所属搜索条件（多路检索分组）、检索通道（深知深度搜索/深知可信搜索）与引用状态
     source["search_key"] = first_str(item.get("搜索条件"), item.get("search_key"))
     source["channel"] = first_str(item.get("检索通道"), item.get("channel"))
@@ -534,6 +540,15 @@ def compute_verification(answer: str, sources: List[Dict[str, str]], payload: Di
     for holder in (payload, payload.get("content") if isinstance(payload.get("content"), dict) else {}):
         self_check_raw = self_check_raw or holder.get("selfCheck") or holder.get("self_check")
     self_items = normalize_self_check(self_check_raw)
+    # 自验收说明里的角标数/材料数由模型手写，可能与脚本统计不一致（3.9.0 合肥题实测：
+    # 过程条 131/131，自验收写“正文132处角标”）。这里统一用真实统计覆盖，避免同页打架。
+    if self_items:
+        actual_marks = len(all_marks)
+        actual_mats = len(cited_sources)
+        for label, (status, note) in list(self_items.items()):
+            fixed = re.sub(r"正文(?:共)?\s*\d+\s*处角标", f"正文{actual_marks}处角标", note)
+            fixed = re.sub(r"与\s*\d+\s*篇材料", f"与{actual_mats}篇材料", fixed)
+            self_items[label] = (status, fixed)
     self_check = None
     if self_items:
         passed = sum(1 for status, _ in self_items.values() if status == "pass")
@@ -598,7 +613,8 @@ def compute_verification(answer: str, sources: List[Dict[str, str]], payload: Di
 # 过程回顾 / 热词（真实计算，不虚构流程）
 # ============================================================
 
-def compute_process_stats(sources: List[Dict[str, str]], answer: str) -> Dict[str, Any]:
+def compute_process_stats(sources: List[Dict[str, str]], answer: str,
+                         search_records: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     """过程回顾条数据：检索次数、每组检索的召回/采用数、入库与引用计数。
 
     全部来自素材自带的真实字段（search_key 分组、used 引用状态、正文角标计数），
@@ -629,6 +645,39 @@ def compute_process_stats(sources: List[Dict[str, str]], answer: str) -> Dict[st
     n_searches = len(cond_rows) or (1 if sources else 0)
     deep_routes = sum(1 for r in cond_rows if "深度" in r.get("channel", ""))
     trusted_routes = sum(1 for r in cond_rows if "可信" in r.get("channel", ""))
+    # 有逐次调用记录时，按真实调用次数统计（同一方案项的深搜与补搜共用 purpose，
+    # 按分组主通道统计会把补搜吞掉——3.9.0 北京题实测：3 深搜 + 2 补搜被显示成仅 3 深搜）
+    records = search_records or []
+
+    def _is_deep_record(r: Dict[str, Any]) -> bool:
+        return ("深度" in str(r.get("channel") or "")
+                or str(r.get("file") or "").split("/")[-1].startswith("deep_"))
+
+    if records:
+        deep_routes = sum(1 for r in records if _is_deep_record(r))
+        trusted_routes = len(records) - deep_routes
+        n_searches = len(records)
+        # 把真实调用挂回各方案组（同一 purpose 的深搜与补搜共用 key）：
+        # 明细行据此标注“深度搜索 + 可信补搜 N 次”，并展示补搜 query。
+        for row in cond_rows:
+            calls = [r for r in records
+                     if (r.get("purpose") or "").strip() == row["key"]]
+            trusted_records = [r for r in calls if not _is_deep_record(r)]
+            row["deep_calls"] = sum(1 for r in calls if _is_deep_record(r))
+            row["trusted_calls"] = len(trusted_records)
+            row["trusted_queries"] = [
+                str(r.get("query") or "").strip()
+                for r in trusted_records
+                if str(r.get("query") or "").strip()
+            ]
+            # 补搜真实增量（merge 产物写入；旧产物无此字段则不显示，避免虚构）
+            if any(("new_articles" in r or "added_paragraphs" in r) for r in trusted_records):
+                row["trusted_new_articles"] = sum(
+                    int(r.get("new_articles") or 0) for r in trusted_records
+                )
+                row["trusted_added_paragraphs"] = sum(
+                    int(r.get("added_paragraphs") or 0) for r in trusted_records
+                )
     used_count = sum(1 for s in sources if s.get("used", True))
     unused_count = len(sources) - used_count
     n_cite_marks = len(re.findall(r"\[(\d+)\]", answer))
@@ -747,6 +796,31 @@ class _TableSanitizer(HTMLParser):
             self.out.append(f"</{self.stack.pop()}>")
 
 
+def _fix_thead_rows(table_html: str) -> str:
+    """修正源表格把多行数据包进 <thead> 的畸形结构：只保留第一行为表头，其余移入 <tbody>。
+
+    背景（2026-10-23 成都题实测）：政府门户抓取的表格常把数据行一起包在 thead 里
+    （如统计分类表 4 行数据全在 thead、仅最后 1 行在 tbody）。白名单清洗只保结构不改
+    行归属，CSS 又给 thead 单元格加表头底色——数据行整片变"表头色"，被用户看成黑白
+    相间。此处把 thead 第 2 行起全部并入 tbody（无 tbody 则新建），只有真正的首行作表头。
+    """
+    m = re.search(r"<thead>(.*?)</thead>", table_html, flags=re.S)
+    if not m:
+        return table_html
+    rows = re.findall(r"<tr>.*?</tr>", m.group(1), flags=re.S)
+    if len(rows) <= 1:
+        return table_html
+    head = f"<thead>{rows[0]}</thead>"
+    moved = "".join(rows[1:])
+    rest = table_html[m.end():]
+    tb = re.search(r"<tbody>(.*?)</tbody>", rest, flags=re.S)
+    if tb:
+        rest = rest[:tb.start()] + f"<tbody>{moved}{tb.group(1)}</tbody>" + rest[tb.end():]
+    else:
+        rest = f"<tbody>{moved}</tbody>" + rest
+    return table_html[:m.start()] + head + rest
+
+
 def sanitize_table_html(text: str) -> str:
     """清洗接口表格 HTML：只保留表格结构标签，属性丢弃、文本转义、脚本样式连内容丢弃。"""
     parser = _TableSanitizer()
@@ -755,7 +829,7 @@ def sanitize_table_html(text: str) -> str:
         parser.close()
     except Exception:  # 解析异常兜底：整体转义，宁可不渲染表格
         return html.escape(str(text or ""), quote=False)
-    return "".join(parser.out)
+    return _fix_thead_rows("".join(parser.out))
 
 
 def render_excerpt_html(text: str) -> str:
@@ -1052,7 +1126,7 @@ def render_verify_panel(v: Dict[str, Any]) -> str:
     cov = v["coverage"]
     parts = [f"{KIND_CATALOG[k][0]} {cov[k]}" for k in ("policy", "data", "case", "reference") if cov.get(k)]
     cov_state = "ok" if cov.get("policy") or cov.get("data") or cov.get("case") else "none"
-    cov_html = (f'<div class="vi"><span class="s {cov_state}">{"✓" if cov_state == "ok" else "—"} 材料构成</span>'
+    cov_html = (f'<div class="vi"><span class="s {cov_state}">{"✓" if cov_state == "ok" else "—"} 材料构成（按内容类型）</span>'
                 f'<span class="d">{esc(" · ".join(parts)) if parts else "材料没标类型"}</span></div>')
 
     sc = v["self_check"]
@@ -1216,7 +1290,10 @@ def render_crumb(chain: List[str]) -> str:
 
 
 def render_segments(source: Dict[str, Any]) -> str:
-    """多段分块摘录：每段独立区块，各带自己的标题链——段落结构与位置直接可见。"""
+    """多段分块摘录：每段独立区块，各带自己的标题链——段落结构与位置直接可见。
+
+    知识专库卡片全量展示所有召回段落，不做"展开/收起"折叠（2026-10-23 按用户要求回退）。
+    """
     segments = source.get("segments") or []
     if not segments:
         return render_excerpt_html(source.get("excerpt") or "接口返回中未识别到可展示的摘录。")
@@ -1227,7 +1304,9 @@ def render_segments(source: Dict[str, Any]) -> str:
             continue
         blocks.append(f'<div class="seg-block">{render_crumb(seg.get("chain") or [])}'
                       f'{render_excerpt_html(text)}</div>')
-    return "".join(blocks) if blocks else render_excerpt_html(source.get("excerpt") or "接口返回中未识别到可展示的摘录。")
+    if not blocks:
+        return render_excerpt_html(source.get("excerpt") or "接口返回中未识别到可展示的摘录。")
+    return "".join(blocks)
 
 
 def render_source_card(source: Dict[str, str], for_print: bool = False) -> str:
@@ -1252,8 +1331,14 @@ def render_source_card(source: Dict[str, str], for_print: bool = False) -> str:
     # 除"〔年份〕序号"外，主席令/国务院令/部令等法定令号同样合规，一并放行
     # （真实任务里《社会保险法》《国务院令第765号》曾被整条丢弃）
     _dn = _dn if re.search(r"〔\d{4}〕\s*\d+\s*号|第\s*(?:\d+|[〇零一二三四五六七八九十百千]+)\s*号", _dn) else ""
-    meta_parts = [v for v in [_dn, source.get("agency"), source.get("date"), source.get("area")]
+    meta_parts = [v for v in [_dn, source.get("article_type"), source.get("agency"), source.get("date")]
                   if v and v != "未知来源"]
+    if source.get("effective_date"):
+        meta_parts.append(f"生效 {source['effective_date']}")
+    if source.get("expiry_date"):
+        meta_parts.append(f"失效 {source['expiry_date']}")
+    if source.get("area"):
+        meta_parts.append(source["area"])
     meta = " | ".join(meta_parts)
     # 高可信徽标：仅"发布日期可信度=高"（模型治理入库、标题模型精抽）的材料；"较高"（门户抓取）不标。
     conf_badge = ""
@@ -1296,15 +1381,50 @@ def render_process_bar(stats: Dict[str, Any], verification: Dict[str, Any]) -> s
         step1_title = f"深知可信搜索 {trusted_n} 次"
     else:
         step1_title = f"深知检索 {stats['n_searches']} 次"
+    def _cond_channel_label(row: Dict[str, Any]) -> str:
+        """按真实调用标注方案组通道；无逐次记录时退回组内多数通道。"""
+        if "deep_calls" in row or "trusted_calls" in row:
+            d = int(row.get("deep_calls") or 0)
+            t = int(row.get("trusted_calls") or 0)
+            parts = []
+            if d:
+                parts.append(f"深度搜索 {d} 路" if d > 1 else "深度搜索")
+            if t:
+                parts.append(f"可信补搜 {t} 次")
+            return " + ".join(parts)
+        ch = row.get("channel", "")
+        if "深度" in ch and "可信" in ch:
+            return "深度搜索+可信搜索"
+        if "深度" in ch:
+            return "深度搜索"
+        return "可信搜索" if ch else ""
+
+    def _supp_detail(row: Dict[str, Any]) -> str:
+        """补搜 query + 真实增量（新增文章/补充段落）；旧产物无增量字段时不虚构。"""
+        queries = row.get("trusted_queries") or []
+        if not queries:
+            return ""
+        text = f'补搜：{esc("；".join(queries))}'
+        bits = []
+        if "trusted_new_articles" in row:
+            bits.append(f'新增 {row.get("trusted_new_articles", 0)} 篇')
+        if "trusted_added_paragraphs" in row:
+            bits.append(f'补充 {row.get("trusted_added_paragraphs", 0)} 段')
+        if bits:
+            text += f'（{" · ".join(bits)}）'
+        return f'<div class="pd-sub">{text}</div>'
+
     detail_rows = "".join(
         f'<div class="pd-row"><b>{esc(row["key"])}'
-        + (f'（{"深度搜索+可信搜索" if ("深度" in row.get("channel", "") and "可信" in row.get("channel", "")) else ("深度搜索" if "深度" in row.get("channel", "") else "可信搜索")}）' if row.get("channel") else "")
-        + f'</b><span>召回 {row["total"]} 条 · 正文采用 {row["used"]} 条</span></div>'
+        + (f'（{_cond_channel_label(row)}）' if _cond_channel_label(row) else "")
+        + f'</b><span>召回 {row["total"]} 条 · 正文采用 {row["used"]} 条</span>'
+        + _supp_detail(row)
+        + '</div>'
         for row in stats["conds"]
     ) or '<div class="pd-row"><span>本次溯源 JSON 未记录各次检索条件</span></div>'
     detail_hint = f'{esc(short(first_query, 26))}…' if (stats["n_searches"] > 1 and first_query) else "查看检索明细"
     if stats["n_searches"] > 1:
-        step1_sub = f"共 {stats['n_searches']} 路检索 · {detail_hint}"
+        step1_sub = f"共 {stats['n_searches']} 次检索 · {detail_hint}"
     elif first_query:
         step1_sub = esc(short(first_query, 26))
     else:
@@ -1528,6 +1648,7 @@ a{color:var(--brand)}
 .pd-row{display:flex;justify-content:space-between;gap:14px;padding:3px 2px;font-size:12.3px;flex-wrap:wrap}
 .pd-row b{color:var(--navy);font-weight:700;min-width:0}
 .pd-row span{color:var(--muted)}
+.pd-sub{flex-basis:100%;color:var(--muted);font-size:11.8px;line-height:1.5;padding-left:2px;word-break:break-all}
 
 /* ===== 核验报告视图 ===== */
 #view-body,#view-report{padding-bottom:26px}
@@ -2218,7 +2339,7 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
     generated = generated_at.strftime("%Y-%m-%d %H:%M")
 
     verification = compute_verification(answer, sources, payload, generated_at)
-    process_stats = compute_process_stats(sources, answer)
+    process_stats = compute_process_stats(sources, answer, payload.get("检索记录") or [])
     citation_warning = ""
     if sources and not used:
         citation_warning = (

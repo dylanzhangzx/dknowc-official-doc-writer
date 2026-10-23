@@ -9,7 +9,10 @@ self_check / recalled_materials / 标准字段，导致核验报告单多项"未
   2. 字段完整性：materials 必须带 excerpts / type（source_url 允许缺省——接口未返回时
      按规则不填、不猜测），recalled_materials 非空；
   3. 角标对应：document_content 的 [n] 角标与 materials 一一对应，无越界；
-  4. self_check 完整：五项检查结果必须全部写入（不得缺失导致"未记录"）。
+  4. self_check 完整：五项检查结果必须全部写入（不得缺失导致"未记录"）；
+  5. 文号只认字段：正文每个文号必须能在 materials 的 `发文字号` 字段找到，
+     禁止从段落正文提取；
+  6. 篇幅锚点：研究型/综合长篇正文汉字数按 3500–5000 校验（可用 length_target 覆盖）。
 
 用法：
   python3 scripts/check_materials.py <溯源JSON> <合并产物JSON>
@@ -146,6 +149,95 @@ def check_citations(content: str, materials: list) -> list[str]:
     return errors
 
 
+DOCNUM_RE = re.compile(r"[〔\[【（(［]\s*(\d{4})\s*[〕\]】）)］]\s*(\d+)\s*号")
+LONG_FORM_MARKERS = ("总结报告", "调研报告", "研究报告", "分析报告", "政策研究",
+                     "产业研究", "工作总结", "汇报材料", "综合性总结")
+
+
+def _docnum_key(text) -> tuple:
+    """提取文号的年份+序号（忽略发文机关前缀），用于字段与正文的严格比对。"""
+    m = DOCNUM_RE.search(str(text or ""))
+    return (m.group(1), m.group(2)) if m else None
+
+
+def check_doc_numbers(content: str, materials: list) -> list[str]:
+    """文号只认 materials 的 `发文字号` 字段，正文不得从段落正文提取文号。
+
+    3.9.0 合肥题实测：243 篇文章 `发文字号` 全为空，正文却写了 4 个文号，
+    全部来自召回段落。按用户口径"只接受接口返回"，这种情况必须拦截。
+    """
+    errors = []
+    field_keys = set()
+    for mat in materials or []:
+        key = _docnum_key(mat.get("发文字号"))
+        if key:
+            field_keys.add(key)
+    seen = set()
+    for m in DOCNUM_RE.finditer(content or ""):
+        key = (m.group(1), m.group(2))
+        if key in field_keys or key in seen:
+            continue
+        seen.add(key)
+        token = re.sub(r"\s+", "", m.group(0))
+        errors.append(
+            f"正文文号“{token}”在 materials 的 发文字号 字段中找不到"
+            f"（不得从段落正文提取；字段为空时正文只写文件名）"
+        )
+    return errors
+
+
+def count_body_chars(content: str) -> int:
+    """正文汉字数：排除 Markdown 标题行，只统计正文汉字。"""
+    lines = [line for line in str(content or "").splitlines()
+             if not line.lstrip().startswith("#")]
+    return len(re.findall(r"[一-鿿]", "\n".join(lines)))
+
+
+def resolve_length_range(trace: dict) -> tuple:
+    """篇幅区间：优先 trace.length_target，其次用户问题里的字数要求，最后默认 3500–5000。"""
+    target = trace.get("length_target")
+    if isinstance(target, (list, tuple)) and len(target) == 2:
+        try:
+            lo, hi = int(target[0]), int(target[1])
+            if lo > 0 and hi >= lo:
+                return lo, hi
+        except (TypeError, ValueError):
+            pass
+    if isinstance(target, dict):
+        try:
+            lo, hi = int(target.get("min")), int(target.get("max"))
+            if lo > 0 and hi >= lo:
+                return lo, hi
+        except (TypeError, ValueError):
+            pass
+    question = str(trace.get("question") or "")
+    m = re.search(r"(\d{3,5})\s*[-—至~～]\s*(\d{3,5})\s*字", question)
+    if m:
+        lo, hi = int(m.group(1)), int(m.group(2))
+        if lo > 0 and hi >= lo:
+            return lo, hi
+    m = re.search(r"(\d{3,5})\s*字", question)
+    if m:
+        n = int(m.group(1))
+        return int(n * 0.8), int(n * 1.2)
+    return 3500, 5000
+
+
+def check_length(trace: dict) -> list[str]:
+    """研究型/综合长篇正文汉字数必须落在篇幅锚点内（用户另有明确要求时从其要求）。"""
+    doc_type = str(trace.get("doc_type") or "")
+    if not any(marker in doc_type for marker in LONG_FORM_MARKERS):
+        return []
+    count = count_body_chars(trace.get("document_content") or "")
+    lo, hi = resolve_length_range(trace)
+    if count < lo or count > hi:
+        return [
+            f"正文汉字数 {count} 不在 {lo}–{hi} 范围（doc_type={doc_type}）——"
+            f"研究型/综合长篇按 3500–5000 字锚点压缩或补足；用户另有字数要求时写入 length_target"
+        ]
+    return []
+
+
 def _norm_key(k: str) -> str:
     """键名归一：去空格（'无 AI 味' → '无AI味'），用于宽容匹配。"""
     return re.sub(r"\s+", "", str(k))
@@ -221,6 +313,11 @@ def main() -> int:
     merged = load_json(Path(merged_path).expanduser())
 
     errors = []
+    if not str(trace.get("question") or "").strip():
+        errors.append(
+            "question 为空——溯源报告必须展示用户原问题全文；"
+            "多行/长 prompt 请用 build_trace_json --question-file 传入，禁止只传首行"
+        )
     index, source_urls = build_source_index(merged)
 
     materials = trace.get("materials") or []
@@ -248,6 +345,12 @@ def main() -> int:
 
     # ③ 角标对应
     errors.extend(check_citations(trace.get("document_content") or "", materials))
+
+    # ③b 文号只认接口字段（禁止从段落正文提取）
+    errors.extend(check_doc_numbers(trace.get("document_content") or "", materials))
+
+    # ③c 篇幅锚点（研究型/综合长篇）
+    errors.extend(check_length(trace))
 
     # ④ self_check 完整
     errors.extend(check_self_check(trace.get("self_check")))
@@ -277,6 +380,7 @@ def main() -> int:
         "file": str(Path(args.trace_json)),
         "materials": len(materials),
         "recalled_materials": len(recalled),
+        "body_chars": count_body_chars(trace.get("document_content") or ""),
         "self_check": "完整" if trace.get("self_check") else "缺失",
         "note": "校验通过，可生成溯源核验报告 HTML",
     }, ensure_ascii=False, indent=2))

@@ -205,11 +205,12 @@ def to_trace_payload(data: dict) -> tuple[dict, str, str]:
             matched = source_index.get(material_name) or source_index.get(normalize_title(material_name), {})
             source_url = first_value(item, "source_url", "sourceUrl", "源网址", "原文链接", "url") or matched.get("source_url", "")
             policy_url = first_value(item, "policyUrl", "policy_url", "knowledgeBase", "知识专库链接") or matched.get("policy_url", "")
-            doc_number = first_value(item, "doc_number", "文号") or matched.get("doc_number", "")
+            doc_number = (first_value(item, "发文字号", "doc_number", "文号")
+                          or matched.get("doc_number", ""))
             articles.append({
                 "文章标题": material_name,
                 "文号": doc_number,
-                "来源": first_value(item, "source", "来源", "publisher"),
+                "来源": first_value(item, "source", "来源", "publisher", "发布或实施机构"),
                 "发布日期": first_value(item, "date", "发布日期", "time"),
                 # 接口原始结构透传：发布日期可信度 + 段落（含段落标题，用于"原文位置"标题链）
                 "发布日期可信度": first_value(item, "发布日期可信度", "可信度", "confidence"),
@@ -223,6 +224,13 @@ def to_trace_payload(data: dict) -> tuple[dict, str, str]:
                 "快照链接": normalize_snapshot_url(first_value(item, "snapshot_url", "快照链接", "screenShotPath", "screenshot_path")) if SNAPSHOT_ENABLED else "",
                 "policyUrl": first_value(item, "policyUrl", "policy_url"),
                 "类型": first_value(item, "type", "素材类型") or "材料",
+                # V2 新增文章级字段（D5 展示 / 追溯）
+                "发文字号": first_value(item, "发文字号", "doc_number", "文号"),
+                "生效日期": first_value(item, "生效日期", "effectiveDate"),
+                "失效日期": first_value(item, "失效日期", "expiryDate"),
+                "文章类型": first_value(item, "文章类型", "文章类别"),
+                "发布或实施机构": first_value(item, "发布或实施机构", "发布机关"),
+                "文件标签": first_value(item, "文件标签"),
                 "核验": first_value(item, "verification", "核验", "核验说明"),
                 # 所属搜索条件（多路检索时按来源分组筛选）与引用状态
                 "搜索条件": first_value(item, "search_key", "搜索条件"),
@@ -234,6 +242,10 @@ def to_trace_payload(data: dict) -> tuple[dict, str, str]:
     # JSON 中残留的 knowledge_bases 字段被忽略（兼容旧 JSON，不报错）。
     content = {"data": {"检索文章": articles}}
     payload = {"answer": answer, "question": title, "content": content}
+    if isinstance(data.get("检索记录"), list):
+        payload["检索记录"] = data.get("检索记录")
+        # 渲染入口会 unwrap 到 content 层，必须同步放进 content（与 selfCheck 同处理）
+        content["检索记录"] = data.get("检索记录")
     # 成稿自检结果（5 项）由生成流程写入溯源 JSON；未写入时渲染器如实显示"未记录"
     self_check = data.get("self_check") or data.get("selfCheck")
     if isinstance(self_check, dict):
