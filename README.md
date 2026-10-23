@@ -1,5 +1,13 @@
 # 深知公文写作（skills.sh Public 版）
 
+## 快速安装
+
+```bash
+npx -y skills add dylanzhangzx/dknowc-official-doc-writer -g
+```
+
+安装后以 `/dknowc-official-doc-writer` 调用；技能显示名为「深知公文写作」。
+
 这是深知公文写作的 skills.sh 分发版本。功能逻辑与主干完整版保持一致，但不内置深知搜索 API Key。API Key 只对需要深知搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）是前置条件；不涉及搜索的简单通知、改写润色、只生成 Word 等任务可直接使用，不要求配置 Key。需要搜索时，由 Agent 通过 MaaS 注册接口完成手机号注册、验证码确认和 API Key 获取，并写入本机 Key 专用配置文件（`~/.config/dknowc/api_key`）。
 
 ## 能力范围
@@ -103,7 +111,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 注入或本机专用配置文
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.9.0`。
+当前 skills.sh Public 版基于 `3.9.1`。
 
 检索通道：统一走脚本通道（`deep_query.py` / `dkag_search.py` / `outline_reference.py`，需 API Key）。3.7.5 起不再走 MCP「深知可信工作台」通道——MCP 侧大结果落盘方案改造完成后另行加回。
 

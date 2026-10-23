@@ -232,13 +232,13 @@ python3 scripts/extract_reference.py official-docs/search-results/ref_full_<任�
 python3 scripts/deep_convert.py official-docs/search-results/deep_<路名>.json --area 地域 --purpose "该路搜索目的"
 ```
 
-4. 转换产物（`result_deep_<路名>.json`）与脚本通道 `--clean` 输出**同构**（顶层 `articles`/`total_articles`/`total_paragraphs`/`search_meta`，段落带自增 `id`）；**含快照/段落标题/发布日期可信度**，**缺独立"文号"字段**（文号在段落内容中）。脚本解析出 0 篇材料会直接报错退出（不会写入空结果）。
+4. 转换产物（`result_deep_<路名>.json`）与脚本通道 `--clean` 输出**同构**（顶层 `articles`/`total_articles`/`total_paragraphs`/`search_meta`，段落带自增 `id`）；**含快照/段落标题/发布日期可信度与文章级文号**（writtenText，`deep_convert.py` 映射为「发文字号」，实测约三成政策类文章携带）。脚本解析出 0 篇材料会直接报错退出（不会写入空结果）。
 
 **阶段二·可信搜索补搜（缺口驱动）**
 
-5. 深度搜索返回**含快照/段落标题/发布日期可信度**（`deep_convert.py` 已保留），但**缺独立"文号"字段**（政策文号在段落内容中）——**政策依据型必补搜**（补搜产出 policyFiles，正文引用政策文号靠其匹配）；数据/案例按研究资料口径表缺口（未给出/未确认/多口径未裁决）决定是否补搜。
+5. 深度搜索返回**含快照/段落标题/发布日期可信度**（`deep_convert.py` 已保留），文章级文号 **writtenText** 已返回并映射为「发文字号」（2026-10-23 起）——**补搜一律按缺口驱动**：关键政策文件/政策原文/数据口径仍缺才补，不再为拿文号而必补；数据/案例按研究资料口径表缺口决定。
 6. 补搜调用 `python3 scripts/dkag_search.py "<query>" --area <地域> --time <时间> --purpose "<搜索目的>" --clean --output result_<路名>.json`（参数见 `reference/search_policy.md` 执行命令节；默认 `segmentCount=2`、`simplified=false`）。返回**立即完整落盘**到 `official-docs/search-results/` 并 `json.load` 校验。
-7. **合并**：阶段一深度产物与阶段二补搜产物用 `merge_search_results.py` 合并后进入素材分类；两阶段产物都纳入溯源核验报告材料面板（深度产物缺独立文号的，政策依据型由补搜的 policyFiles 匹配补上）。
+7. **合并**：阶段一深度产物与阶段二补搜产物用 `merge_search_results.py` 合并后进入素材分类；两阶段产物都纳入溯源核验报告材料面板（同一文件深搜与补搜都召回时字段取并集，文号以非空字段为准）。
 
 **两阶段共同约束**：
 
