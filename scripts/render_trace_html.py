@@ -305,7 +305,7 @@ def source_from_article(item: Dict[str, Any], index: int, segment: Optional[Dict
     # 改用接口提供的存档快照链接回看——快照是原文的存档副本，按钮文案如实区分。
     source["snapshot"] = first_str(item.get("快照链接"), item.get("snapshot"), item.get("screenShotPath"))
     source["link_dead"] = item.get("链接失效") is True or item.get("link_dead") is True
-    # 发布日期可信度（实测：「高」=模型治理入库、标题模型精抽；「较高」=门户抓取、标题规则提取）
+    # 发布日期可信度（「高」=模型治理入库、标题模型精抽；「较高」=门户抓取、标题规则提取）
     source["conf"] = first_str(item.get("发布日期可信度"), item.get("可信度"), item.get("confidence"))
     key, label, css = normalize_kind(source["kind"])
     source["type_key"] = key
@@ -367,9 +367,9 @@ def extract_sources(payload: Dict[str, Any]) -> List[Dict[str, str]]:
         # 一篇材料一张卡：段落合并为摘录（paragraph_text 拼接全部段落），不按段落拆卡——
         # 溯源 JSON 的 materials 与正文角标按"材料"粒度一一对应，拆段会使编号错位。
         source = source_from_article(item, len(sources) + 1)
-        # 去重键（2026-10-08 修复）：按归一化「标题 + URL」判同一篇，不含 source["id"]——
+        # 去重键：按归一化「标题 + URL」判同一篇，不含 source["id"]——
         # id 是递增序号、每条都不同，旧键含 id 等于从不去重；可信搜索对同一篇文章按段落
-        # 返回多条片段时会全部出卡（曾出现同一篇文章同名卡片重复十余张的情况）。
+        # 返回多条片段时会全部出卡（避免同一篇文章同名卡片重复）。
         # 标题或 URL 单独可用时退用其一，均缺失退用摘录前缀。
         _t = re.sub(r"\s+", "", source["title"] or "")
         _u = (source["url"] or "").strip().rstrip("/")
@@ -540,8 +540,7 @@ def compute_verification(answer: str, sources: List[Dict[str, str]], payload: Di
     for holder in (payload, payload.get("content") if isinstance(payload.get("content"), dict) else {}):
         self_check_raw = self_check_raw or holder.get("selfCheck") or holder.get("self_check")
     self_items = normalize_self_check(self_check_raw)
-    # 自验收说明里的角标数/材料数由模型手写，可能与脚本统计不一致（3.9.0 合肥题实测：
-    # 过程条 131/131，自验收写“正文132处角标”）。这里统一用真实统计覆盖，避免同页打架。
+    # 自验收说明里的角标数/材料数由模型手写，可能与脚本统计不一致（过程条与自验收可能因手写统计不一致）。这里统一用真实统计覆盖，避免同页打架。
     if self_items:
         actual_marks = len(all_marks)
         actual_mats = len(cited_sources)
@@ -646,7 +645,7 @@ def compute_process_stats(sources: List[Dict[str, str]], answer: str,
     deep_routes = sum(1 for r in cond_rows if "深度" in r.get("channel", ""))
     trusted_routes = sum(1 for r in cond_rows if "可信" in r.get("channel", ""))
     # 有逐次调用记录时，按真实调用次数统计（同一方案项的深搜与补搜共用 purpose，
-    # 按分组主通道统计会把补搜吞掉——3.9.0 北京题实测：3 深搜 + 2 补搜被显示成仅 3 深搜）
+    # 按分组主通道统计会把补搜吞掉——否则补搜会被吞掉）
     records = search_records or []
 
     def _is_deep_record(r: Dict[str, Any]) -> bool:
@@ -799,7 +798,7 @@ class _TableSanitizer(HTMLParser):
 def _fix_thead_rows(table_html: str) -> str:
     """修正源表格把多行数据包进 <thead> 的畸形结构：只保留第一行为表头，其余移入 <tbody>。
 
-    背景（2026-10-23 成都题实测）：政府门户抓取的表格常把数据行一起包在 thead 里
+    背景：政府门户抓取的表格常把数据行一起包在 thead 里
     （如统计分类表 4 行数据全在 thead、仅最后 1 行在 tbody）。白名单清洗只保结构不改
     行归属，CSS 又给 thead 单元格加表头底色——数据行整片变"表头色"，被用户看成黑白
     相间。此处把 thead 第 2 行起全部并入 tbody（无 tbody 则新建），只有真正的首行作表头。
@@ -2494,7 +2493,7 @@ def align_sources_to_answer(answer: str, sources: List[Dict[str, str]]) -> List[
 def _check_degraded_input(payload: Dict[str, Any], path: str) -> None:
     """渲染前硬校验：发现会产出"残缺核验报告"的输入直接报错，阻断静默降级。
 
-    手写溯源 JSON 曾出现缺 recalled_materials、self_check 结构
+    手写溯源 JSON 可能缺 recalled_materials、self_check 结构
     不完整，渲染器静默显示"依据溯源 0/24 / 材料新旧 未记录 / 交付前检查 未记录"。
     这里只拦截两个必然导致报告失真的情况；完整校验用 scripts/check_materials.py。
     """

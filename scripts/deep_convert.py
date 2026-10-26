@@ -8,7 +8,7 @@
 
 为什么转 clean 形态：深度搜索返回的文章字段（文章标题/数据源/发布日期/办理地域/源网址/段落）
 与脚本通道 `--clean` 同构。真实 deep-query/v3 返回含快照（screenShotPath）、段落
-标题（标题链数据源）、发布日期可信度，本脚本如实保留；文章级文号字段为 **writtenText**（2026-10-23 起接口已返回，本脚本映射为「发文字号」；北京政策题实测覆盖约 31%，含少量公告类编号）。
+标题（标题链数据源）、发布日期可信度，本脚本如实保留；文章级文号字段为 **writtenText**（接口已返回文章级 writtenText，本脚本映射为「发文字号」；部分文章携带，含少量公告类编号）。
 本脚本把 `data.searches[].result` 与 `data.common_articles` 按源网址/标题去重摊平，
 段落重新编号（id 全局自增与 `--clean` 一致），段落内容去 HTML 标签后保留。
 
@@ -52,7 +52,7 @@ _TABLE_TAG_RE = re.compile(r"<\s*(/?)\s*(table|thead|tbody|tr|td|th|br)\b[^>]*>"
 def strip_html(text) -> str:
     """去掉深度搜索段落内容里的 HTML 标签并反转义实体（真实返回含表格等标签）。
 
-    表格标签（table/thead/tbody/tr/td/th/br）原样保留（2026-10-14 修复）：深度返回的
+    表格标签（table/thead/tbody/tr/td/th/br）原样保留：深度返回的
     标准限值表/名单表此前被整体拍平成空格分隔文本，知识专库与引文胶囊无法按表格
     形态展示（渲染端 sanitize_table_html / render_excerpt_html 对表格做白名单清洗与
     展示，可信搜索通道 dkag_search 亦原样保留表格，两通道口径一致）。"""
@@ -150,8 +150,7 @@ def convert(data, area: str, purpose: str) -> dict:
         region = clean_text(first_value(raw, "办理地域", "area"))
         if region:
             article["办理地域"] = region
-        # 2026-10-23 实测（北京新能源政策题）：deep-query/v3 已在文章级返回 writtenText（文号），
-        # 覆盖约 31%（14/45，含"公告2026年第2号"等非标准格式）。此处映射为下游统一键「发文字号」，
+        # deep-query/v3 已在文章级返回 writtenText（文号），本脚本映射为下游统一键「发文字号」，
         # 一路透传 merge → build_trace_json → 卡片 meta / G6 文号闸门——政策路不再"为拿文号而必补"。
         doc_number = clean_text(first_value(raw, "writtenText", "发文字号", "文号"))
         if doc_number:
@@ -200,7 +199,7 @@ def convert(data, area: str, purpose: str) -> dict:
         "policyFiles": [],
         "search_meta": search_meta,
         "channel": "deep",
-        "deep_note": ("深度搜索首轮召回产物：含快照/段落标题/发布日期可信度与文章级文号（writtenText→发文字号，实测约三成政策类文章携带），"
+        "deep_note": ("深度搜索首轮召回产物：含快照/段落标题/发布日期可信度与文章级文号（writtenText→发文字号，部分政策类文章携带），"
                       "补搜一律按缺口驱动：政策原文/关键文件缺了才补，不再为拿文号而必补。"),
     }
 

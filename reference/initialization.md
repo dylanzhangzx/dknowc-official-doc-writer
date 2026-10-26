@@ -10,7 +10,7 @@ python3 scripts/initialize.py
 
 初始化用于检查 Python、`python-docx`、`requests` 等基础运行环境，不要求用户提供单位或个人信息，也不上传检测结果。初始化不是 API Key 硬性门禁：只有当当前任务确实需要调用深知搜索时，API Key 才是前置条件。
 
-**素材检索与范文大纲一律走本 Skill 脚本通道**（`deep_query.py` / `dkag_search.py` / `outline_reference.py`），需要 API Key（3.7.5 起不再检测、不再走 MCP「深知可信工作台」通道——MCP 侧大结果落盘方案改造完成后另行加回）。素材检索按**两阶段执行（3.7.5 起）**：首轮用 `deep_query.py` 做**深度搜索广度召回**（3 路按素材类型，query 用「对象+关注方向」句式），返回 JSON 落盘后运行 `python3 scripts/deep_convert.py` 转换；补搜用 `dkag_search.py` 做**可信搜索精准补强**（深度搜索含快照/段落标题/可信度与文章级文号 writtenText；补搜一律按缺口驱动，2026-10-23 起不再为拿文号而必补）。范文大纲用 `outline_reference.py`。深度搜索与可信搜索的返回都**立即完整原样落盘**并 `json.load` 校验后再转换，研究资料、溯源 JSON 整理与核验报告全部按现有流程执行（深度产物含快照/段落标题/可信度与文章级文号；补搜产物四字段完整）。搜索与大纲失败时先串行重试该路一次（鉴权竞争多为瞬态）；任一路额度用尽（`quota_exhausted=true`）整批停止、禁止任何重试、引导 MaaS 平台；重试仍失败才如实告知用户并暂停等待确认，不得擅自改用 Web 搜索或跳过检索。
+**素材检索与范文大纲一律走本 Skill 脚本通道**（`deep_query.py` / `dkag_search.py` / `outline_reference.py`），需要 API Key；MCP「深知可信工作台」通道当前未启用。素材检索按**两阶段执行**：首轮用 `deep_query.py` 做**深度搜索广度召回**（3 路按素材类型，query 用「对象+关注方向」句式），返回 JSON 落盘后运行 `python3 scripts/deep_convert.py` 转换；补搜用 `dkag_search.py` 做**可信搜索精准补强**（深度搜索含快照/段落标题/可信度与文章级文号 writtenText；补搜按缺口驱动，不再为拿文号而必补）。范文大纲用 `outline_reference.py`。深度搜索与可信搜索的返回都**立即完整原样落盘**并 `json.load` 校验后再转换，研究资料、溯源 JSON 整理与核验报告全部按现有流程执行（深度产物含快照/段落标题/可信度与文章级文号；补搜产物四字段完整）。搜索与大纲失败时先串行重试该路一次（鉴权竞争多为瞬态）；任一路额度用尽（`quota_exhausted=true`）整批停止、禁止任何重试、引导 MaaS 平台；重试仍失败才如实告知用户并暂停等待确认，不得擅自改用 Web 搜索或跳过检索。
 
 ### 不需要搜索的任务
 
@@ -43,7 +43,7 @@ python3 scripts/initialize.py
   成功后转述脚本 `user_message`（固定话术见 `reference/onboarding_scripts.md` S0），再用已写入的 Key 重跑 `python3 scripts/initialize.py` 确认 `api_key_configured=true`，继续原任务。密钥不得在对话正文中展示。
 - **工具不存在，或调用返回"请先完成 MCP OAuth 授权"等错误**：视为该宿主未安装/未授权该 MCP，**直接回落到下面的手机号验证码注册流程**（流程不变），不向用户提及 MCP 内部细节、不反复重试取 Key。
 
-MaaS 注册两步执行（初始化输出 `guide_message` 已含引导话术；2026-10-09 注册链路改造起，发码分两个分支，都必须支持）：
+MaaS 注册两步执行（初始化输出 `guide_message` 已含引导话术；发码分两个分支，都必须支持）：
 
 ```bash
 node scripts/register.mjs send --phone <手机号>
@@ -61,6 +61,6 @@ node scripts/register.mjs register --phone <手机号> --vcode <验证码> --org
 
 成功后转述脚本 `user_message`（积分到账轻确认；`existed=true` 时为老用户找回话术；`pending=true` 时为密钥准备中话术——非错误，不重新注册、不重新发码，等用户示意后用同一手机号与同一验证码重试一次，短信码 5 分钟内有效），并按 `envWriteSucceeded` 处理：**为 true** 时脚本已把 Key 写入本机专用配置文件（`~/.config/dknowc/api_key`），直接用返回的 Key 重跑初始化确认后继续原任务；**为 false** 时以脚本返回的 `apiKey` 临时注入环境变量（`DKNOWC_API_KEY=<key> python3 scripts/initialize.py`）完成本次任务，不得据此判定注册失败、不得重复走手机号流程。不得向用户展示完整 Key。默认不重新生成 Key，仅用户明确要求时追加 `--new-key`。注册失败按脚本 `user_message` 处理；连续失败降级引导 `https://platform.dknowc.cn/auth/#/login`。
 
-验证链路安全红线（2026-10-09 注册链路改造）：验证链接、短信验证码、密码与密钥不写入公共日志、群聊或长期记忆；不代用户打开验证页、不模拟或绕过任何验证、不伪造验证凭据；对用户只说"验证链接/验证页面"，不出现验证码组件、滑条、行为验证等内部术语。
+验证链路安全红线：验证链接、短信验证码、密码与密钥不写入公共日志、群聊或长期记忆；不代用户打开验证页、不模拟或绕过任何验证、不伪造验证凭据；对用户只说"验证链接/验证页面"，不出现验证码组件、滑条、行为验证等内部术语。
 
 

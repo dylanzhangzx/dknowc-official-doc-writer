@@ -49,7 +49,7 @@ SEL_TYPE_FIELDS = ("type", "素材类型", "类型")
 SEL_TITLE_FIELDS = ("标题", "文章标题", "title", "material_name")
 SEL_URL_FIELDS = ("源网址", "source_url", "sourceUrl", "原文链接", "url")
 # 分组键兜底链不含"搜索地域"（3.7.6 修复）：地域名（"中国"/"浙江省"）做分组键无意义，
-# "搜索目的"为空的篇目会退化成地域胶囊（曾出现 75/295 篇退化）；全部落空时归"其他检索"。
+# "搜索目的"为空的篇目会退化成地域胶囊（避免大量篇目退化）；全部落空时归"其他检索"。
 SEL_SEARCH_KEY_FIELDS = ("search_key", "搜索条件", "deep_group")
 
 SELF_CHECK_ITEMS = ["事实有据", "结构完整", "无占位残留", "无AI味", "格式合规"]
@@ -191,6 +191,14 @@ def main() -> int:
         except OSError as exc:
             raise SystemExit(f"错误：无法读取 --question-file {question_path}（{exc}）")
     body_path = Path(args.body_file).expanduser()
+    try:
+        body_path.resolve().relative_to(INPUT_DIR.resolve())
+    except ValueError:
+        raise SystemExit(
+            f"错误：正文文件必须位于 {INPUT_DIR}/ 下，当前为 {body_path}。\n"
+            "带角标的正文是本 Skill 的内部中间文件，不得写到宿主会话目录；"
+            "请先保存到 official-docs/input/ 后再装配溯源 JSON。"
+        )
     body = body_path.read_text(encoding="utf-8")
     merged = load_json(Path(args.merged_json).expanduser())
 
@@ -282,7 +290,7 @@ def main() -> int:
         "recalled_materials": recalled,
         "self_check": self_check,
         # 用户明确字数要求时由素材清单传入（如 {"min": 4000, "max": 5000}）；
-        # 缺省时 check_materials 按 3500–5000 锚点校验。
+        # 未提字数时为空，check_materials 不做篇幅校验。
         "length_target": materials_list.get("length_target"),
         # 逐次调用记录（来自合并产物 search_summary）：过程条按真实调用次数
         # 统计"深度搜索 N 路 / 可信补搜 M 次"，不受同 purpose 分组影响。

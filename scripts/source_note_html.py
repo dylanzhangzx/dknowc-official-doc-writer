@@ -152,7 +152,7 @@ SNAPSHOT_ENABLED = True
 
 
 def normalize_snapshot_url(url: str) -> str:
-    """快照路径容错：接口部分返回值缺 /A/ 层级（实测 60 条中 5 条，补全后即可访问），
+    """快照路径容错：接口部分返回值缺 /A/ 层级（部分返回值缺少该层级，补全后即可访问），
     统一规范化为 https://attach.dknowc.cn/snapshot/A/<2位>/<2位>/<哈希>.jpg。"""
     u = (url or "").strip()
     if u.startswith("https://attach.dknowc.cn/snapshot/") and "/snapshot/A/" not in u:
@@ -171,7 +171,7 @@ def verify_snapshots(articles: list[dict]) -> int:
     是否符合合法格式（https://attach.dknowc.cn/snapshot/A/…），不合法则弃用。
 
     不做网络可达检测：attach 前置雷池 WAF 的拦截与请求方 IP 风控相关
-    （检测机高频请求会被拦而普通用户正常），可达性实测会误杀好快照；
+    （检测机高频请求会被拦而普通用户正常），可达性检测可能误杀可用快照；
     快照文件本身的存在性由可信搜索侧的数据质量保障。
     """
     dropped = 0
@@ -220,7 +220,7 @@ def to_trace_payload(data: dict) -> tuple[dict, str, str]:
                 "源网址": source_url,
                 "知识专库原文": policy_url,
                 # 快照链接（接口 screenShotPath）：原文 404 时的存档兜底，渲染层择一展示。
-                # 接口刚上线数据不稳（实测部分快照 404/NoSuchKey），默认关闭，--enable-snapshot 打开。
+                # 接口数据可能不稳（部分快照 404/NoSuchKey），默认关闭，--enable-snapshot 打开。
                 "快照链接": normalize_snapshot_url(first_value(item, "snapshot_url", "快照链接", "screenShotPath", "screenshot_path")) if SNAPSHOT_ENABLED else "",
                 "policyUrl": first_value(item, "policyUrl", "policy_url"),
                 "类型": first_value(item, "type", "素材类型") or "材料",

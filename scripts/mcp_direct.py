@@ -13,7 +13,7 @@
 环境变量 `CODEBUDDY_MCP_CONFIG` 内联 JSON 里含各 MCP server 的 url + headers
 （Bearer 会话令牌）。脚本从该变量动态拿到 dknowc-mcp 的地址与头，直连代理发 JSON-RPC，
 返回的完整 JSON 由脚本写入文件——模型不抄写大 JSON，也就没有转写丢内容的问题
-（此前模型调 MCP 工具会把 60-170KB 返回抄进上下文再落盘，实测丢失 83%）。
+（避免把大体积返回先抄进上下文再落盘，降低丢失风险）。
 
 只负责"调用 + 落盘原始返回"；转换仍走现有 deep_convert.py / mcp_convert.py。
 

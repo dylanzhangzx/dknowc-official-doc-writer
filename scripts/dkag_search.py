@@ -36,9 +36,9 @@ API_KEY_ENV = "DKNOWC_API_KEY"
 DEFAULT_BASE_URL = "https://open.dknowc.cn/open-api/maas/dependable/v2/search"
 SEARCH_RESULTS_DIR = SKILL_ROOT / "official-docs" / "search-results"
 CONFIG_HELP_URL = "https://platform.dknowc.cn/"
-DEFAULT_SEGMENT_COUNT = 4          # 默认段数 4（3.9.0 第一轮 2/4/8 实测：4/18000 质量最优）
+DEFAULT_SEGMENT_COUNT = 4          # 默认段数 4（经 2/4/8 参数对比，4/18000 质量最优）
 DEFAULT_SIMPLIFIED = False
-DEFAULT_MATERIAL_LENGTH = 18000    # 与 segmentCount=4 配套（3.9.0 实测选定）
+DEFAULT_MATERIAL_LENGTH = 18000    # 与 segmentCount=4 配套（经参数对比选定）
 DEFAULT_SEARCH_TYPE = "policy"   # V2 必填 searchType；每次调用只传一个，未指定时默认 policy
 DEFAULT_FILTER_PARA = True         # 剔除弱相关（R 级）段落
 DEFAULT_QUERY_TOP_AREA = False     # 上级地域材料走单独构路，不依赖接口开关
@@ -429,7 +429,7 @@ def dkag_search(
                       需要不同来源时请分路并行调用后合并
         search_channels: 指定动态搜索渠道，如 govSearch、webSearch、wxSearch
         material_length: 控制返回素材总长度，默认 12000
-        segment_count: 每篇材料最多返回的相关段落数，默认 2（可调，用于 2/4/8 实测）
+        segment_count: 每篇材料最多返回的相关段落数，默认 2（可调，用于参数调优）
         filter_para: 是否剔除弱相关（R 级）段落，默认 True
         query_top_area: 是否由接口带出上级地域材料，默认 False（上级材料走单独构路）
 
@@ -669,7 +669,7 @@ def main():
         "--segment-count",
         type=int,
         default=DEFAULT_SEGMENT_COUNT,
-        help=f"每篇材料最多返回的相关段落数（默认: {DEFAULT_SEGMENT_COUNT}；用于 2/4/8 实测调参）"
+        help=f"每篇材料最多返回的相关段落数（默认: {DEFAULT_SEGMENT_COUNT}；用于参数调优）"
     )
     parser.add_argument(
         "--no-filter-para",

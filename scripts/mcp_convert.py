@@ -174,7 +174,7 @@ def convert(data, area: str, purpose: str) -> dict:
         doc_number = clean_text(first_value(material, "doc_number", "文号"))
         if doc_number:
             # 文号直写文章级（MCP 通道增量）：整理溯源 JSON 时直接复制，
-            # 免跨文件翻 policyFiles——实测模型做跨文件标题匹配会跳过
+            # 免跨文件翻 policyFiles——避免模型跨文件标题匹配时跳过
             article["文号"] = doc_number
         articles.append(article)
 

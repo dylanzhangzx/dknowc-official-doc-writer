@@ -15,14 +15,15 @@
 - 简单短文本直接完成，不强制大纲、搜索、素材确认环节。
 - 正式写作需求先取范文大纲和搜索建议，调用 `scripts/outline_reference.py`（需 API Key）。工具/接口失败或 `outline_available=false` 时不中断、不自行生成替代大纲、不进大纲确认，直接按原流程继续。大纲接口只提供结构参考，不提供事实依据；返回可用结果时先展示"建议大纲 + 搜索建议"等用户确认后再进搜索流程。
 - 只有在政策、数据、案例、文号、标准等支撑材料必要时才搜索；搜索逻辑遵循 `reference/search_policy.md`，素材四分类和来源限制不得改变；召回材料进入正文遵循 `reference/material_usage_guidance.md`，材料服务于观点，不得拼贴成正文。
-- 本 Skill 所有素材检索只能走深知脚本通道（`deep_query.py` / `dkag_search.py`，3.7.5 起不再走 MCP），**两阶段（3.7.5 起）**：首轮用深度搜索做广度召回（`scripts/deep_query.py`，返回经 `scripts/deep_convert.py` 转换），补搜用可信搜索做精准补强（`scripts/dkag_search.py`）；不得用 Web Search、Web Fetch、浏览器搜索或公开网页抓取替代。准备调用深知搜索必须先给方案等用户确认，不得同一轮边给方案边执行。
+- 本 Skill 所有素材检索只能走深知脚本通道（`deep_query.py` / `dkag_search.py`；MCP 通道当前未启用），**两阶段**：首轮用深度搜索做广度召回（`scripts/deep_query.py`，返回经 `scripts/deep_convert.py` 转换），补搜用可信搜索做精准补强（`scripts/dkag_search.py`）；不得用 Web Search、Web Fetch、浏览器搜索或公开网页抓取替代。准备调用深知搜索必须先给方案等用户确认，不得同一轮边给方案边执行。
 - 任一关键步骤异常时暂停并向用户确认下一步；不得自行跳过搜索、改用 Web 搜索、改写任务目标或继续生成正式结果。生成前后按任务风险调用 `reference/review_checklist.md`。
 
 **交付纪律**
 
 - 交付形态按 `reference/task_router.md` 的两个开关判定：**命中 15 种法定公文（含复函、提醒函）→ 生成 `.docx` Word**；**本次任务执行过深知搜索 → 生成产出物 HTML（`XXX.html`，正文 / 溯源核验报告 / 知识专库 三页）**。两个开关独立、可同时成立；用户明确要求 Word 时照出 Word，但不因此取消产出物 HTML。只有用户明确说"直接在对话里给正文""不要生成文件""先看文字草稿"时才在对话输出正文。不得先发"正文初稿/压缩版/预览版"，直接生成产物并只给简短说明和路径。
 - 正式公文 Word 保持纯净：正文不带来源角标、`【素材使用情况】`、`【知识专库链接】`或长 URL；可点击溯源由产出物 HTML 承载。Word 正文与元数据均不写 AI 生成提示，AI 标识仅由交付话术承担（本稿由 AI 辅助生成、依据已经过可信核验，建议按单位审签流程核批后正式行文）；排版脚本自动过滤误带的提示行。
-- Markdown 草稿只是生成 Word 的内部临时文件，不得展示、链接、发送或要求用户审阅。
+- **先出 HTML、后补 Word 时**：只从带角标正文派生一份无角标 Word 副本（仅去角标/排版），**不得修改带角标正文、不得重新装配溯源 JSON、不得重渲染已交付的 HTML**；补交 Word 时交付脚本只传 Word 文件，不重复复制 HTML。Word 排版所需的格式整理只落在副本上，原正文与 HTML 保持不动。
+- Markdown 草稿只是内部中间文件，不得展示、链接、发送或要求用户审阅。**带角标的正文只能保存在 `official-docs/input/`**，不得写到宿主会话目录；`deliver_outputs.py` 只交付 `official-docs/output/` 下的 `.html` / `.docx`，Markdown 正文不交付、不复制、不列入 `present_files`。**已知当前会话目录时必须显式传 `--dest <当前会话目录>`**，不要依赖自动探测，避免多会话并发时串目录。
 - 生成 Word 时，正文超过一行必须先写入临时 `.txt`/`.md` 文件，再把文件路径传给 `scripts/format_document.py`；不得把多行正文塞进 `--text`，也不得用临时脚本手写 `python-docx` 生成正式交付文件。
 - 默认只生成普通 Word；仅用户明确说"红头文件/红头版/套红头/生成红头"时生成红头。
 - 当前版本不支持自动生成 PDF，不主动提及；用户要求 PDF 时只生成 Word 并说明建议在 Word/WPS 中自行导出。不得用 LibreOffice、ReportLab、pypdf、浏览器打印等降级方案生成正式公文 PDF。
