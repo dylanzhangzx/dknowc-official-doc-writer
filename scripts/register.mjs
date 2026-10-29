@@ -8,7 +8,6 @@
 //     2=转人工接手；4=发送结果未确认（不重发）；1=失败。
 //   node register.mjs register --phone <p> --vcode <c> [--type 6] [--organ ..] [--name ..] [--channel ..] [--source ..] [--password ..] [--new-key]
 //     可能返回 pending:true（账号已创建、密钥资源准备中）——非错误，稍后同参数重试一次。
-//   node register.mjs save-key     # 把 MCP create_api_key 拿到的密钥落盘（stdin 优先，或 --api-key）
 // 说明：文字题由调用方（Agent）直接计算，本脚本只负责会话、题目状态与提交，不求解。
 // 2026-10-29 注册链路改造：平台新增 Agent 注册文字题（先解题再发码，图片验证只作为人工兜底）。
 // 旧 /sendMessage 发码入口对 Agent 一律要求图片验证，已由 challenge + answer 取代。
@@ -46,16 +45,8 @@ const DEFAULT_GUIDE = "https://platform.dknowc.cn/maas/identity-center/maas/logi
 // 挑战状态（Cookie / token / attempt / 题目）落盘，供 challenge 与 answer 两次调用之间传递。
 // attempt 必须始终使用服务端返回值，刷新题目不增加机会，故本机只做保存、不改写。
 const CHALLENGE_STATE_FILE = "maas_agent_challenge.json";
-// Key 持久化目标：本机专用配置文件（XDG 规范路径），不再写 ~/.zshrc。
-// 3.7.5 迁移：写入新文件成功后，清理 ~/.zshrc 中的历史 Key 块。
+// Key 持久化目标：本机专用配置文件（XDG 规范路径），不写也不改 ~/.zshrc 等 shell 配置。
 const KEY_FILE_NAME = "api_key";
-const ZSHRC_START = "# >>> dknowc official doc writer api key >>>";
-const ZSHRC_END = "# <<< dknowc official doc writer api key <<<";
-// 历史 ~/.zshrc 标记块（含旧名），迁移期统一清理
-const LEGACY_BLOCKS = [
-  [ZSHRC_START, ZSHRC_END],
-  ["# >>> dknowc api key >>>", "# <<< dknowc api key <<<"],
-];
 
 // 配置目录：默认 ~/.config/dknowc（Windows 为 %APPDATA%\dknowc），可用 DKNOWC_CONFIG_DIR 覆盖。
 function configDir() {
@@ -71,21 +62,6 @@ function configDir() {
 
 function apiKeyFilePath() {
   return path.join(configDir(), KEY_FILE_NAME);
-}
-
-function removeLegacyZshrcBlocks() {
-  // 迁移：从 ~/.zshrc 移除历史 Key 标记块（避免污染 shell 配置）
-  const zshrcPath = path.join(os.homedir(), ".zshrc");
-  try {
-    let existing = fs.existsSync(zshrcPath) ? fs.readFileSync(zshrcPath, "utf8") : "";
-    if (!existing) return;
-    let changed = false;
-    for (const [start, end] of LEGACY_BLOCKS) {
-      const re = new RegExp(`${escapeRegExp(start)}[\\s\\S]*?${escapeRegExp(end)}\\n?`, "m");
-      if (re.test(existing)) { existing = existing.replace(re, ""); changed = true; }
-    }
-    if (changed) fs.writeFileSync(zshrcPath, existing, { encoding: "utf8", mode: 0o600 });
-  } catch (e) { /* 清理失败不阻断写入流程 */ }
 }
 
 function maskPhone(phone) {
@@ -334,12 +310,11 @@ async function createNewApiKey(openBase, existingApiKey, name, remark) {
 }
 
 function writeApiKeyToConfigFile(apiKey) {
-  // 写本机专用配置文件（纯文本一行 Key，600 权限）；成功后清理历史 ~/.zshrc 块
+  // 写本机专用配置文件（纯文本一行 Key，600 权限）；不读写 ~/.zshrc 等 shell 配置
   const filePath = apiKeyFilePath();
   try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
     fs.writeFileSync(filePath, `${String(apiKey).trim()}\n`, { encoding: "utf8", mode: 0o600 });
-    removeLegacyZshrcBlocks();
     return { written: true, path: filePath, error: null };
   } catch (e) {
     return { written: false, path: filePath, error: e && e.message ? e.message : String(e) };
@@ -409,43 +384,6 @@ async function main() {
   const base = a.base || DEFAULT_BASE;
   const cmd = a._[0];
 
-  if (cmd === "save-key") {
-    // 3.7.7：MCP 取 Key 路径的落盘子命令。宿主提供 dknowc-mcp 的 create_api_key 且调用
-    // 成功（返回顶层 JSON {"apiKey": "..."}）后，用本命令落盘，用户无需手机号验证码。
-    // 密钥来源优先 stdin（printf '%s' "<密钥>" | node register.mjs save-key，避免出现在
-    // 命令行参数里），其次 --api-key；仅接受 sk- 开头。落盘复用 writeApiKeyToConfigFile
-    // （600 权限 + 清理历史 ~/.zshrc 块），与手机号注册路径同一份持久化逻辑。
-    let apiKey = "";
-    try {
-      if (!process.stdin.isTTY) {
-        const chunks = [];
-        for await (const c of process.stdin) chunks.push(c);
-        apiKey = Buffer.concat(chunks).toString("utf-8");
-      }
-    } catch { /* stdin 读取失败时回退 --api-key */ }
-    if (!apiKey.trim() && a["api-key"] && a["api-key"] !== true) apiKey = String(a["api-key"]);
-    apiKey = apiKey.trim();
-    if (!apiKey.startsWith("sk-") || apiKey.length < 20) {
-      console.log(JSON.stringify({
-        status: false,
-        msg: "密钥格式不符（应为 sk- 开头的 MaaS API Key），请确认调用的是 create_api_key 的返回值",
-      }));
-      process.exit(1);
-    }
-    const w = writeApiKeyToConfigFile(apiKey);
-    console.log(JSON.stringify({
-      status: w.written,
-      envWriteSucceeded: w.written,
-      envWriteTarget: w.path,
-      error: w.error || null,
-      // user_message：给用户的固定话术，Agent 必须原样转述，不得改写后发挥
-      user_message: w.written
-        ? "已通过你的深知可信工作台授权直接开通搜索功能，无需手机号验证，马上开始检索。"
-        : "密钥保存到本机时出现问题，需要改用手机号验证码方式开通。",
-    }));
-    process.exit(w.written ? 0 : 1);
-  }
-
   // —— 第一步：领题 ——
   if (cmd === "challenge") {
     if (!a.phone || a.phone === true) {
@@ -468,7 +406,7 @@ async function main() {
     const g = await httpJson("GET", guideUrl, { headers: withAttribution({}) });
     const guideOk = !g.requestUnknown && g.json && g.json.challenge && g.json.challenge.url;
     if (!guideOk) {
-      // 文字题接口未上线或平台临时回退时，回落原有短信直发分支（3.9.3 之前的行为）。
+      // 文字题接口未上线或平台临时回退时，回落原有短信直发分支。
       // 两条路径对用户等价：退出 0=已发码、退出 2=人工验证链接、退出 1=停点；输出带 flow 标明走了哪条。
       const { body: r, requestUnknown } = await post(base + "/sendMessage", { phone, type: "register", channel });
       const lc = String(r.code || (r.data && r.data.code) || "");
@@ -803,7 +741,7 @@ async function main() {
       const keyName = a["new-key-name"] && a["new-key-name"] !== true ? a["new-key-name"] : payload.apiKeyName;
       const keyRemark = a["new-key-remark"] && a["new-key-remark"] !== true
         ? a["new-key-remark"]
-        : "由 SkillHub 深知公文写作按用户要求重新生成";
+        : "由「skills.sh」深知公文写作按用户要求重新生成";
       const { result, apiKey } = await createNewApiKey(
         a["open-base"] && a["open-base"] !== true ? a["open-base"] : DEFAULT_OPEN_BASE,
         data.apiKey,
@@ -818,9 +756,11 @@ async function main() {
         newKeyError = result.errmsg || result.msg || "新 API Key 创建失败";
       }
     }
-    const zshrcWrite = ok && apiKeyToSave && !a["no-zshrc"]
+    // --no-write：本次不落盘（如仅验证链路）；--no-zshrc 为历史别名，行为相同
+    const skipWrite = Boolean(a["no-write"] || a["no-zshrc"]);
+    const keyWrite = ok && apiKeyToSave && !skipWrite
       ? writeApiKeyToConfigFile(apiKeyToSave)
-      : { written: false, path: apiKeyFilePath(), error: null };
+      : { written: false, path: apiKeyFilePath(), error: null, skipped: skipWrite };
     // user_message：给用户的固定话术，Agent 必须原样转述，不得改写后发挥。
     // 权益告知（注册赠送 10 万积分 + 实名认证再送 10 万积分）已前移到开通引导
     // （initialize.guide_message / onboarding_scripts S1），此处只做轻确认，避免成功节点信息过重导致转述截断。
@@ -853,15 +793,17 @@ async function main() {
       envName: API_KEY_ENV,
       // 明文 Key 只在"未写入本机配置文件、必须靠它临时注入环境变量"时才输出，其余情况
       // 只给掩码——脚本输出可能被宿主 UI 回显或模型贴进对话
-      apiKey: (apiKeyToSave && !zshrcWrite.written && !a["no-zshrc"]) ? apiKeyToSave : null,
+      apiKey: (apiKeyToSave && !keyWrite.written && !skipWrite) ? apiKeyToSave : null,
       apiKeyMasked: apiKeyToSave ? `${apiKeyToSave.slice(0, 7)}...${apiKeyToSave.slice(-4)}` : null,
-      envWriteRequired: Boolean(apiKeyToSave) && !zshrcWrite.written,
-      envWriteTarget: zshrcWrite.path,
-      envWriteSucceeded: Boolean(zshrcWrite.written),
-      envWriteError: zshrcWrite.error,
-      envWriteInstruction: zshrcWrite.written
-        ? `已写入 ${zshrcWrite.path}；脚本直读该文件，无需重启宿主，本次不再返回明文密钥。`
-        : `未能写入 ${zshrcWrite.path}，本次已在 apiKey 字段返回明文，请由 Agent 临时注入环境变量 ${API_KEY_ENV}（不得展示给用户、不得写入公开文件）。`,
+      envWriteRequired: Boolean(apiKeyToSave) && !keyWrite.written && !skipWrite,
+      envWriteTarget: keyWrite.path,
+      envWriteSucceeded: Boolean(keyWrite.written),
+      envWriteError: keyWrite.error,
+      envWriteInstruction: keyWrite.written
+        ? `已写入 ${keyWrite.path}；脚本直读该文件，无需重启宿主，本次不再返回明文密钥。`
+        : skipWrite
+          ? "本次按 --no-write 要求既不写入本机、也不返回明文密钥（仅用于验证能否取得密钥）；需要持久化时去掉该参数重新执行。"
+          : `未能写入 ${keyWrite.path}，本次已在 apiKey 字段返回明文，请由 Agent 临时注入环境变量 ${API_KEY_ENV}（不得展示给用户、不得写入公开文件）。`,
       currentSessionInstruction: `当前任务继续执行初始化时，请用本次返回的 apiKey 临时注入环境变量 ${API_KEY_ENV}，不得向用户展示完整 Key。`,
       newKeyError,
       fallbackRegisterUrl: FALLBACK_REGISTER_URL,
@@ -869,7 +811,7 @@ async function main() {
     process.exit(ok && Boolean(apiKeyToSave) ? 0 : 1);
   }
 
-  console.error("用法: node register.mjs <challenge|answer|register|save-key> ...");
+  console.error("用法: node register.mjs <challenge|answer|register> ...");
   process.exit(2);
 }
 

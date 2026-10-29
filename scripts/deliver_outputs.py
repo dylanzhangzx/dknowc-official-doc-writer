@@ -97,7 +97,7 @@ HOST_ENV_VARS = (
     "WORKBUDDY_HOME",
     # WorkBuddy 实际注入的权威环境标识是 CODEBUDDY_HOST
     # （值如 workbuddy-desktop）与 WORKBUDDY_PRODUCT_NAME（值 WorkBuddy）——
-    # 此前只查 WORKBUDDY_* 前缀，在 WorkBuddy 下必然识别失败、每次任务都要 --dest。
+    # 旧实现只查 WORKBUDDY_* 前缀，在 WorkBuddy 下必然识别失败、每次任务都要 --dest。
     "CODEBUDDY_HOST",
     "WORKBUDDY_PRODUCT_NAME",
     "DOUBAO_WORKSPACE",
@@ -207,7 +207,7 @@ def doubao_chat_dir() -> tuple[Path | None, list[str]]:
 
     优先用当前目录所在的会话（进程在哪运行就交付到哪，与 WorkBuddy 分支同理、
     并发最可靠）；定位不到时退化为"最近活跃的会话目录"，其 mtime 早于活跃窗口
-    视为无法确定。修复：此前只看 mtime，cwd 在 new-chat-12
+    视为无法确定。只看 mtime 时，cwd 在 new-chat-12
     时却把产物交付到 new-chat-13——用户在当前会话看不到文件，且交付动作会刷新
     目标目录 mtime，误差在 6 小时窗口内持续粘滞。
     """
@@ -351,7 +351,7 @@ def detect_dest(explicit_dest: str | None, host: str) -> tuple[Path | None, bool
         return dest, True, "cwd", False, []
 
     # 宿主身份未知：不复制、不要求 --dest，交付物保留在 skill 输出目录
-    # （3.7.5 起：仅 WorkBuddy/豆包有明确工作区才复制，其余宿主留在 skill output）
+    # （仅 WorkBuddy/豆包有明确工作区时复制，其余宿主留在 skill output）
     if host == "unknown":
         return None, False, "unknown", False, doubao_candidates
 
@@ -490,7 +490,7 @@ def main() -> int:
         results.append({"copied": False, "error": "没有找到可交付的产出物"})
     elif not args.files and len(files) > 1:
         # 未显式指定文件、且 output 目录里同时有多个近期产物：不猜，要求显式指定
-        # （此前会把上一任务的产物一起交付，造成串任务）
+        # （旧实现会把上一任务的产物一起交付，造成串任务）
         note = (f"未指定产出物、且输出目录中有 {len(files)} 个近期文件（{'、'.join(p.name for p in files[:5])}），"
                 "无法确定哪些是本次任务的，已停止复制。请显式传入本次产出物路径后重跑本脚本。")
         results.append({"copied": False, "error": "未指定产出物且有多个近期候选"})

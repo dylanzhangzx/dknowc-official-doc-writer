@@ -138,7 +138,7 @@ python3 scripts/format_document.py \
 红头文件 = 普通格式文档 + 红头表格 + 国标版记。
 
 生成策略：
-- 自用版和 public 版均使用代码化红头生成，不依赖 Word 模板。
+- 统一使用代码化红头生成，不依赖 Word 模板。
 - 红头、发文字号、签发人、函件红线、会议纪要表头和版记由脚本按文种生成。
 
 工作流程：
@@ -198,7 +198,6 @@ python3 scripts/template_generator.py 通知 \
 | `--org` | 发文机关（可选） | XX单位 |
 | `--doc-number` | 发文字号（可选） | XX〔2026〕25号 |
 | `--signer` | 签发人（上行文需要，可选） | |
-| `--content` | 正文文件路径 | official-docs/input/content.txt |
 
 支持的文种：
 - 下行文：通知、通报
@@ -233,7 +232,7 @@ python3 scripts/template_generator.py 通知 \
 
 ## 三、公文格式标准（附录A）
 
-所有正文格式配置统一存储在 `config/format.json`，遵循《XX单位公文格式样本（试行）》。
+所有正文格式配置统一存储在 `config/format.json`，遵循 `config/format.json` 与 `reference/standards/` 的格式规范。
 
 | 元素 | 字体 | 字号 | 缩进 | 行距 |
 |-----|------|------|------|------|
@@ -290,7 +289,7 @@ python3 scripts/template_generator.py 通知 \
 
 ---
 
-# 附：Word 输出与产出物交付（自 SKILL.md 迁入）
+# 附：Word 输出与产出物交付
 
 
 
