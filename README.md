@@ -8,7 +8,7 @@ npx -y skills add dylanzhangzx/dknowc-official-doc-writer -g
 
 安装后以 `/dknowc-official-doc-writer` 调用；技能显示名为「深知公文写作」。
 
-这是深知公文写作的 skills.sh 分发版本。功能逻辑与主干完整版保持一致，但不内置深知搜索 API Key。API Key 只对需要深知搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）是前置条件；不涉及搜索的简单通知、改写润色、只生成 Word 等任务可直接使用，不要求配置 Key。需要搜索时，由 Agent 通过 MaaS 注册接口完成手机号注册、验证码确认和 API Key 获取，并写入本机 Key 专用配置文件（`~/.config/dknowc/api_key`）。
+这是深知公文写作的 skills.sh 分发版本。功能逻辑与主干完整版保持一致，但不内置深知搜索 API Key。API Key 只对需要深知搜索的任务（查政策依据、数据支撑、案例参考、最新政策情况）是前置条件；不涉及搜索的简单通知、改写润色、只生成 Word 等任务可直接使用，不要求配置 Key。需要搜索时，由 Agent 通过 MaaS 注册接口完成手机号注册、验证码确认和 API Key 获取（注册前需先通过平台下发的文字题校验，必要时由手机号持有人完成一次页面验证），并写入本机 Key 专用配置文件（`~/.config/dknowc/api_key`）。
 
 ## 能力范围
 
@@ -61,19 +61,28 @@ skills.sh 版默认使用：
 - 渠道码 `8C8D411C-6A46-4E99-887D-87D9A1329930`。
 - 统一环境变量 `DKNOWC_API_KEY` 保存 API Key，由公文范文大纲接口和深知可信搜索接口共用。
 
-当任务需要搜索且当前环境变量 `DKNOWC_API_KEY` 未配置时，进入 MaaS 注册。第 1 步，发送短信验证码（只调用一次、不自动重试）：
+当任务需要搜索且当前环境变量 `DKNOWC_API_KEY` 未配置时，进入 MaaS 注册。平台要求 Agent 先答一道文字题再发码，题目由 Agent 当场计算，不把题目发给用户。第 1 步，领题（只调用一次、不自动重试）：
 
 ```bash
-node scripts/register.mjs send --phone 13812345678
+node scripts/register.mjs challenge --phone 13812345678
 ```
 
-发码有两个分支，都必须支持（注册链路）：
+- **退出 0（`status=true`）**：返回 `question.prompt` 与 `answerFormat`，直接计算后进入第 2 步；答题过程不进入对话，返回 `reused=true` 表示沿用本机未过期的同一道题。
+- **回退兜底**：若官方指引不可用（平台尚未上线文字题或临时回退），`challenge` 自动改走原有短信直发分支，退出 0 即 `code="SMS_SENT"`，**不需要调用 `answer`**，直接等用户验证码；退出 2 为人工验证链接。输出 `flow` 字段标明 `agent-text` 或 `legacy`。
+- **退出 2（`code="HUMAN_REQUIRED"`，短信尚未发送）**：转述 `user_message` 并原样给出脚本返回、经安全校验的验证链接，暂停等待手机号持有人本人完成页面验证并回复短信验证码。完成验证后不得再调 challenge 或 answer；只说"验证好了"时仅追问短信码。链接一次性、约 10 分钟有效。
+- **退出 1（错误）**：按 `user_message` 处理；限频、目标锁定、服务不可用、号码被拒、发送结果未确认等各有停点，不循环重试、不换号、不绕过。
 
-- **退出 0（`status=true`，短信直发）**：转述脚本输出的 `user_message`（含脱敏手机号与"最新一条"提示），暂停并请用户提供收到的 6 位验证码。
-- **退出 2（`code="CAPTCHA_REQUIRED"`，短信尚未发送）**：转述 `user_message` 并原样给出脚本返回、经安全校验的验证链接，暂停等待用户在页面完成验证并回复短信验证码。用户在页面完成验证后不得再调 send；只说"验证好了"时仅追问短信码。链接一次性、约 10 分钟有效。（退出 2 也可能是参数错误，需结合 JSON 的 `code` 字段判断。）
-- **退出 1（错误）**：按 `user_message` 处理；限频、验证链接过期、供应商失败、发送结果未确认等各有停点，不循环重试。
+第 2 步，提交答案并申请发码（答案必须是非负整数，不带单位）：
 
-第 2 步，注册并获取 API Key：
+```bash
+node scripts/register.mjs answer --phone 13812345678 --answer 218
+```
+
+- **退出 0（`SMS_SENT`）**：转述 `user_message`（含脱敏手机号与"最新一条"提示），暂停并请用户提供收到的 6 位验证码；不得重复调用。
+- **退出 3（`AGENT_TEXT_RETRY`）**：答错已换新题，JSON 带新的 `question`，重新计算后再次调用，含首次最多 3 次；不得重置 attempt、不得重复领题刷机会。
+- **退出 2 / 4 / 1**：分别对应转人工、发送结果未确认（不自动重发）、失败停点。
+
+第 3 步，注册并获取 API Key：
 
 ```bash
 node scripts/register.mjs register --phone 13812345678 --vcode 123456 --organ 个人 --name 用户
@@ -112,7 +121,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 注入或本机专用配置文
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.9.2`。
+当前 skills.sh Public 版基于 `3.9.3`。
 
 检索通道：统一走脚本通道（`deep_query.py` / `dkag_search.py` / `outline_reference.py`，需 API Key）。当前版本 MCP「深知可信工作台」通道暂未启用。
 
