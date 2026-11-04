@@ -7,22 +7,25 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并生成含正文、溯源核验报告与知识专库的产出物，帮助用户写得有依据、能复核、可交付。正式公文（15 种法定文种）可生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and produce a deliverable containing the formal content, a source-verification report and a knowledge-library view. Word documents are generated for the 15 statutory official-document types, and red-head document formatting is supported when explicitly requested by the user."
 category: "office-efficiency"
-version: "3.9.4"
+version: "3.9.5"
 author: "彩智科技"
 permissions:
   network:
     - "https://open.dknowc.cn/"
     - "https://platform.dknowc.cn/"
+    - "https://down.dknowc.cn/"
   local_read:
     - "本 Skill 的 reference、config、official-docs、knowledge-base 等规则、标准、配置、参考资料和个人素材库文件"
   local_write:
     - "本地初始化状态文件"
     - "本机 Key 专用配置文件（~/.config/dknowc/api_key）中的 DKNOWC_API_KEY"
+    - "版本自检缓存（~/.config/dknowc/update_check_doc_writer.json）"
     - "用户明确授权保存的写作偏好"
     - "用户明确授权保存的个人素材库文件（knowledge-base/ 目录）"
     - "生成的 Word 文档"
     - "生成的产出物 HTML（正文 / 溯源核验报告 / 知识专库 三页）"
     - "搜索结果中间文件"
+    - "用户同意升级后的本 Skill 安装目录就地替换与安装目录旁整目录备份 zip（scripts/update_skill.py）"
 secrets:
   - "DKNOWC_API_KEY"
 ---
@@ -33,7 +36,7 @@ secrets:
 
 ## 权限说明
 
-本 Skill 会访问 `https://open.dknowc.cn/` 用于公文范文大纲、深知可信搜索和产出物整理；访问 `https://platform.dknowc.cn/auth/#/login` 用于 MaaS 手机号验证码注册、API Key 获取和管理平台地址说明；访问 `https://platform.dknowc.cn/maas/identity-center/maas/login/` 用于读取官方 Agent 注册指引、领取注册文字题并提交答案（人工兜底时另含一次性验证页链接）。运行过程中会读取本 Skill 的规则、标准、配置和参考资料文件，并在本地写入初始化状态文件、用户授权保存的写作偏好、生成的 Word 文档、产出物 HTML 和搜索结果中间文件。MaaS 注册取 Key 成功后，会把 `DKNOWC_API_KEY` 写入本机 Key 专用配置文件（`~/.config/dknowc/api_key`，纯文本一行 Key、600 权限，不写 `~/.zshrc`）；脚本读取顺序为进程环境变量优先、缺失时自动读取该文件，历史 `~/.zshrc` 中的 Key 块仅作迁移期兜底。Skill 包内不包含真实 API Key，API Key 必须通过环境变量 `DKNOWC_API_KEY` 注入或配置文件持久化，不得硬编码，不得写入公开包，不得在对话中展示完整内容。
+本 Skill 会访问 `https://open.dknowc.cn/` 用于公文范文大纲、深知可信搜索和产出物整理；访问 `https://platform.dknowc.cn/auth/#/login` 用于 MaaS 手机号验证码注册、API Key 获取和管理平台地址说明；访问 `https://platform.dknowc.cn/maas/identity-center/maas/login/` 用于读取官方 Agent 注册指引、领取注册文字题并提交答案（人工兜底时另含一次性验证页链接）；匿名访问 `https://platform.dknowc.cn/open-api/` 的公开技能目录做版本自检；仅在用户同意升级后从 `https://down.dknowc.cn/` 下载官方升级包（见「版本自检与引导升级」）。运行过程中会读取本 Skill 的规则、标准、配置和参考资料文件，并在本地写入初始化状态文件、版本自检缓存、用户授权保存的写作偏好、生成的 Word 文档、产出物 HTML 和搜索结果中间文件。MaaS 注册取 Key 成功后，会把 `DKNOWC_API_KEY` 写入本机 Key 专用配置文件（`~/.config/dknowc/api_key`，纯文本一行 Key、600 权限，不写 `~/.zshrc`）；脚本读取顺序为进程环境变量优先、缺失时自动读取该文件，历史 `~/.zshrc` 中的 Key 块仅作迁移期兜底。用户同意升级后，`update_skill.py` 会在安装目录旁生成整目录备份 zip 并就地替换安装目录（`official-docs/`、`knowledge-base/` 与 `config/` 个人配置保留）。Skill 包内不包含真实 API Key，API Key 必须通过环境变量 `DKNOWC_API_KEY` 注入或配置文件持久化，不得硬编码，不得写入公开包，不得在对话中展示完整内容。
 
 ## 设计模式
 
@@ -52,6 +55,18 @@ secrets:
 - **不需要搜索的任务**：只要 `python3`、`python_docx`、`requests` 就绪即可继续，不要求配置 Key、不引导注册。
 - **需要搜索但未配置**（`api_key_configured=false` / `search_ready=false`）：暂停原任务，按 `reference/initialization.md` 引导开通；**引导前不得输出任何“已核实/已查到”类政策内容**，先讲价值再提手机号。
 - 依赖缺失、Key 判定、注册流程、验证码与密钥安全红线：完整规则见 `reference/initialization.md`；话术见 `reference/onboarding_scripts.md`。
+
+## 版本自检与引导升级（initialize 输出 `update` 字段）
+
+- initialize.py 每次运行都会匿名查询技能目录公开接口，与本包 SKILL.md 版本比较（24h 本地缓存、3s 超时静默失败）。`update.checked=false`（网络不可达 / 环境停用 / 渠道除外）时**不得向用户提及任何版本或升级话题**，直接继续原任务——版本自检永远不构成阻断、不影响 `ready` 语义。
+- `update.update_available=true`（远端登记版本高于本包）时：**在开始执行用户任务前先征询**——initialize 之后、处理任务之前，先原样转述 `update.message` 问用户是否升级（每个会话最多一次，得到答复前不得开始处理任务）；用户同意→运行 `python3 scripts/update_skill.py --yes` 完成升级（向用户转述输出 user_message）后继续原任务；用户拒绝或跳过→运行 `python3 scripts/update_skill.py --decline` 静默记录后直接继续原任务，本会话不再提及版本话题。initialize 输出中的 `update.instruction` 是**脚本输出指令，必须执行**（与 user_message 同级约束）。
+- 被拒版本不再重复提示，仅当目录出现更高版本时才在后续会话重新提示一次；用户主动要求升级时运行 `python3 scripts/update_skill.py --yes --force` 无视拒绝记录执行（仍走全部下载与验包校验）。
+- 升级统一使用官方目录登记的 MaaS 包执行（四步已全部代码化，**禁止绕过脚本自行下载替换**）。脚本内置官方目录地址、下载源 OSS 前缀白名单、固定包名与验包校验（单一顶层目录／无路径逃逸与软链接／zip 完整性／包内 SKILL.md 名称一致且版本＝登记版本），先整目录备份、失败自动回滚；`official-docs/`、`knowledge-base/` 与 `config/` 个人配置保留，`~/.config/dknowc/`（API Key、自检缓存）在技能目录之外不受影响：
+  1. 预览：`python3 scripts/update_skill.py`——输出版本对比、下载地址与影响说明，不做任何改动；
+  2. 执行：`python3 scripts/update_skill.py --yes`（仅在用户明确同意后使用）；
+  3. 结束后**原样转述输出中的 `user_message`**（成功／失败话术）；退出码非 0（2 无更新／3 下载或验包失败／4 替换失败已回滚）时如实转述后**直接继续用户原任务**（当前版本功能完好），不重试、不手工下载替换，本会话不再提及版本话题——与 initialize 输出的 `update.instruction` 失败分支口径一致；
+  4. 升级成功后继续用户原任务（脚本已完成替换后校验）。
+- 升级后调用来源声明随新包统一为 MaaS 渠道，属预期行为；已注册用户的 Key 与注册关系不受影响，**无需二次注册**。
 
 ## 任务路由
 
@@ -124,6 +139,7 @@ secrets:
 | 语言质检（可选） | `scripts/prose_lint.py` |
 | 检索与转换脚本 | `scripts/deep_query.py`、`scripts/deep_convert.py`、`scripts/dkag_search.py`、`scripts/merge_search_results.py`、`scripts/outline_reference.py`、`scripts/extract_reference.py` |
 | 产出与交付脚本 | `scripts/build_trace_json.py`、`scripts/check_materials.py`、`scripts/source_note_html.py`、`scripts/format_document.py`、`scripts/template_generator.py`、`scripts/deliver_outputs.py` |
+| 版本自检与引导升级 | `scripts/update_skill.py`（执行前征询与升级执行规则见「版本自检与引导升级」节） |
 
 ## 个人素材库与写作偏好
 
