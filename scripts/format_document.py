@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 公文排版脚本 v2.0.0
-严格按照 config/format.json 与 reference/standards/ 的格式规范进行自动排版
+严格按照 config/format.json 与 reference/standards/*.md 的格式规范进行自动排版
 
 【v2.0.0 更新说明】
 - 删除所有红头文件相关代码（红头+尾表由 template_generator.py 处理）
@@ -750,6 +750,11 @@ def _only_signature_tail(lines, index):
         s = line.strip()
         if not s or s == '[分页符]' or s.startswith('<!--'):
             continue
+        # 单独一行"附件"表示附件正文页开始，其后内容属附件，不再参与落款判定
+        # （否则"附件"页的标题、表格题等正文行会让文末署名被误判为非落款，
+        #  连带成文日期也不右对齐）
+        if s == '附件':
+            break
         if is_date_line(s) or s.startswith(tail_prefixes):
             continue
         return False
@@ -1213,15 +1218,35 @@ def text_width_score(text):
 def compute_column_widths(table_rows, usable_width_dxa):
     num_cols = max(len(row) for row in table_rows)
     scores = []
+    max_scores = []
     for col_idx in range(num_cols):
         values = [row[col_idx] if col_idx < len(row) else '' for row in table_rows]
         max_score = max(text_width_score(value) for value in values) if values else 4
         avg_score = sum(text_width_score(value) for value in values) / max(len(values), 1)
+        max_scores.append(max_score)
         scores.append(max(6, min(28, max_score * 0.65 + avg_score * 0.35)))
 
     total_score = sum(scores) or num_cols
-    min_width = 900 if num_cols <= 6 else 700
+    # 最小列宽按中文字宽设定：三号字单字约 320 twips，1300 约合 4 字，
+    # 避免"金额""序号"这类短列表头被挤成两行
+    min_width = 1300 if num_cols <= 6 else 1000
     widths = [max(min_width, int(usable_width_dxa * score / total_score)) for score in scores]
+
+    # 短列按内容定型：最宽单元格（含单元格左右内边距 240twips）不超过版心 30% 的列，
+    # 直接按其内容需求给宽，省出的宽度让给"测算说明""备注"这类长文本列，
+    # 否则短列被挤成多行、长文本列反而留白。
+    cell_margin = 240
+    required = [score * 160 + cell_margin for score in max_scores]
+    narrow = [i for i in range(num_cols) if required[i] <= usable_width_dxa * 0.30]
+    if narrow and len(narrow) < num_cols:
+        for i in narrow:
+            widths[i] = max(min_width, required[i])
+        rest = usable_width_dxa - sum(widths[i] for i in narrow)
+        rest_score = sum(scores[i] for i in range(num_cols) if i not in narrow) or 1
+        for i in range(num_cols):
+            if i not in narrow:
+                widths[i] = max(min_width, int(rest * scores[i] / rest_score))
+
     total_width = sum(widths)
     if total_width != usable_width_dxa and total_width > 0:
         widths[-1] += usable_width_dxa - total_width

@@ -231,6 +231,9 @@ def to_trace_payload(data: dict) -> tuple[dict, str, str]:
                 "文章类型": first_value(item, "文章类型", "文章类别"),
                 "发布或实施机构": first_value(item, "发布或实施机构", "发布机关"),
                 "文件标签": first_value(item, "文件标签"),
+                # 外部联网材料标记（联网检索/宿主 WebSearch 路）：渲染层打「非官方来源」徽标
+                "非官方来源": True if item.get("非官方来源") else "",
+                "数据权威性": first_value(item, "数据权威性", "authority"),
                 "核验": first_value(item, "verification", "核验", "核验说明"),
                 # 所属搜索条件（多路检索时按来源分组筛选）与引用状态
                 "搜索条件": first_value(item, "search_key", "搜索条件"),

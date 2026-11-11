@@ -7,7 +7,7 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并生成含正文、溯源核验报告与知识专库的产出物，帮助用户写得有依据、能复核、可交付。正式公文（15 种法定文种）可生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and produce a deliverable containing the formal content, a source-verification report and a knowledge-library view. Word documents are generated for the 15 statutory official-document types, and red-head document formatting is supported when explicitly requested by the user."
 category: "office-efficiency"
-version: "3.9.5"
+version: "3.9.6"
 author: "彩智科技"
 permissions:
   network:
@@ -89,10 +89,10 @@ secrets:
 
 0. **范文大纲**（正式写作，可跳过短通知等）：调用 `scripts/outline_reference.py`；返回可用则展示“建议大纲 + 搜索建议”等用户确认；失败静默降级、不臆造替代大纲。规则见 `reference/outline_rules.md`。
 1. **搜索方案（G1）**：固定 3 个方向——政策依据 / 数据支撑 / 参考案例，每个方向 **1 条启动 query**（地域层级写在 query 内，不拆成独立方案项）；向用户展示 3 条 query 原文并停止等待确认；确认前不得检索。补搜不预先列方案，按缺口自动执行。规则见 `reference/search_policy.md`。
-2. **检索（两阶段）**：深度搜索 3 路广度召回（返回立即落盘并校验，再 `deep_convert.py` 转换）；补搜按素材类型**单值分路**——政策依据路 `--search-type policy`，数据/案例路 `govSite`，**禁止混传**；同一查询需要两类来源时并行调用后合并。**同一方向的深搜与补搜共用同一个 `--purpose`**，保证报告按 3 个方案项分组。命令、参数、失败重试与额度规则见 `reference/search_policy.md` 执行命令/执行节奏/异常处理节。
+2. **检索（三阶段降级链）**：深度搜索 3 路广度召回（返回立即落盘并校验，再 `deep_convert.py` 转换）；补搜按素材类型**单值分路**——政策依据路 `--search-type policy`，数据/案例路 `govSite`，**禁止混传**；同一查询需要两类来源时并行调用后合并。**同一方向的深搜与补搜共用同一个 `--purpose`**，保证报告按 3 个方案项分组。库内补搜后核心事实仍无支撑（无结果/无直接支撑/方向不一致）时，走**公开网络检索降级**：联网模式 `--search-channel webSearch` → 宿主 WebSearch 结果经 `websearch_convert.py` 转换、`merge_search_results.py` 合并进同一材料池；外部材料带「非官方来源」标记进溯源报告，**库内确无该事实时可作事实引用**（只补缺失、官方优先，不单独支撑已核验核心结论）。命令、参数、失败重试与额度规则见 `reference/search_policy.md` 执行命令/执行节奏/异常处理节。
 3. **素材清单（G2）**：基于合并产物**全量逐篇**分类，把选中清单落盘 `official-docs/input/materials_<任务>.json`（顶层 `selected` 键）；禁止手工挑拣、写完正文再反查、手写 materials。分类口径与写法参考判断见 `reference/materials_pipeline.md`。
 4. **研究资料（G3，研究型/综合长篇）**：分类自检时生成初版（口径表缺口驱动补搜），用户确认素材清单后定稿，正文基于定稿写作；短公文不启用。规则见 `reference/materials_pipeline.md` 与 `reference/research_notes.md`。
-5. **写作**：按文种读取 `reference/standards/*.md`；事实边界、标点、篇幅规则（只服从用户明确要求）、高风险表述、表格规则与成稿自检见 `reference/writing_rules.md`；材料进入正文见 `reference/material_usage_guidance.md`。
+5. **写作**：按文种读取 `reference/standards/*.md`；长篇材料按 `reference/writing_method.md`《写作六步法》执行（立意→识体→谋篇→段内成文→语言→修改）；事实边界、标点、篇幅规则（只服从用户明确要求）、高风险表述、表格规则与成稿自检见 `reference/writing_rules.md`；材料进入正文见 `reference/material_usage_guidance.md`。
 6. **产出物与交付**：命中 15 种法定公文 → 生成 Word；执行过搜索 → 生成产出物 HTML（溯源 JSON 装配 → `check_materials.py` 校验 → `source_note_html.py` 渲染）；交付前执行 `deliver_outputs.py`。完整规则见 `reference/output_guide.md`。
 7. **审查**：按触发条件读 `reference/review_checklist.md`；语言复核按 `reference/anti_ai_patterns.md`，可选 `scripts/prose_lint.py`。
 
@@ -131,7 +131,7 @@ secrets:
 | 搜索方案、参数、命令、失败处理 | `reference/search_policy.md` |
 | 素材分类模板、参考范文流程、产出物页面格式 | `reference/search_guide.md` |
 | 素材分类、研究资料、溯源 JSON 契约 | `reference/materials_pipeline.md`、`reference/research_notes.md`、`reference/material_usage_guidance.md` |
-| 正文写作、文种写法、事实边界、篇幅、自检 | `reference/writing_rules.md`、`reference/genre_writing_notes.md`、`reference/fact_discipline.md`、`reference/anti_ai_patterns.md`、`reference/standards/*.md` |
+| 正文写作、写作六步法、文种写法、事实边界、篇幅、自检 | `reference/writing_rules.md`、`reference/genre_writing_notes.md`、`reference/writing_method.md`、`reference/fact_discipline.md`、`reference/anti_ai_patterns.md`、`reference/standards/*.md` |
 | Word / 产出物 HTML / 交付 | `reference/output_guide.md` |
 | 审查 | `reference/review_checklist.md` |
 | 素材库与写作偏好 | `reference/local_memory_guide.md`、`scripts/local_memory.py` |

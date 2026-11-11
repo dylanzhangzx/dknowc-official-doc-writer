@@ -57,7 +57,7 @@ API Key 按需配置：
 
 skills.sh 版默认使用：
 
-- 接入点 `type=6`，即深知可信搜索。
+- 接入点：深知可信搜索（注册接口不传数字 type 参数）。
 - 渠道码 `8C8D411C-6A46-4E99-887D-87D9A1329930`。
 - 统一环境变量 `DKNOWC_API_KEY` 保存 API Key，由公文范文大纲接口和深知可信搜索接口共用。
 
@@ -121,7 +121,7 @@ API Key 只能通过环境变量 `DKNOWC_API_KEY` 注入或本机专用配置文
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.9.5`。
+当前 skills.sh Public 版基于 `3.9.6`。
 
 检索通道：统一走脚本通道（`deep_query.py` / `dkag_search.py` / `outline_reference.py`，需 API Key）。当前版本 MCP「深知可信工作台」通道暂未启用。
 

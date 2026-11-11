@@ -140,7 +140,7 @@
 
 用户确认后再执行搜索；如用户调整地域、query 或素材类型，按调整后的方案执行。执行时必须把每条搜索项的“搜索目的”作为内部 `--purpose` 传给搜索脚本，用于检索目的记录；不得把 `--purpose` 展示给用户。**同一方案项的深度搜索路与其补搜必须共用同一个 `--purpose`**，保证合并产物按 3 个方案项分组。
 
-内部执行时，Agent 统一走脚本通道（需 API Key；MCP 通道当前未启用），**两阶段**：阶段一用 `scripts/deep_query.py`（返回落盘后 `scripts/deep_convert.py` 转换）、阶段二补搜用 `scripts/dkag_search.py`。内部参数选择不得要求用户理解，也不得作为搜索方案的一部分展示。同一次方案内的多个搜索项默认并行执行（每路独立 `--output` 与 `--purpose`，单批不超过 4 路），单次调用内用后台任务并行、`wait` 等全部结束后逐路检查结果；失败路单独串行重试一次，任意一路余额用尽即整批停止（详见 `reference/search_policy.md` 搜索执行节奏）。
+内部执行时，Agent 统一走脚本通道（需 API Key；MCP 通道当前未启用），**三阶段降级链**：阶段一用 `scripts/deep_query.py`（返回落盘后 `scripts/deep_convert.py` 转换）、阶段二补搜用 `scripts/dkag_search.py`、阶段三公开网络检索（联网模式与宿主 WebSearch，见第五节）。内部参数选择不得要求用户理解，也不得作为搜索方案的一部分展示。同一次方案内的多个搜索项默认并行执行（每路独立 `--output` 与 `--purpose`，单批不超过 4 路），单次调用内用后台任务并行、`wait` 等全部结束后逐路检查结果；失败路单独串行重试一次，任意一路余额用尽即整批停止（详见 `reference/search_policy.md` 搜索执行节奏）。
 
 ---
 
@@ -218,32 +218,39 @@ python3 scripts/extract_reference.py official-docs/search-results/ref_full_<任�
 
 ---
 
-## 五、两阶段检索执行流程（纯脚本通道）
+## 五、三阶段检索执行流程（纯脚本通道）
 
-搜索方案确认后，按**两阶段**执行（多路仍按并行规则；统一走脚本，需 API Key；MCP 通道当前未启用）：
+搜索方案确认后，按**三阶段降级链**执行（多路仍按并行规则；统一走脚本，需 API Key；MCP 通道当前未启用）：
 
 **阶段一·首轮深度搜索（3 路按素材类型）**
 
-1. 每路调用 `python3 scripts/deep_query.py "<query>" --area <地域> --json-only --output deep_<路名>.json`（需 API Key）。参数：`query`（按 Query 生成原则，**对象+关注方向，不限定到具体文件名/文号**）、`--area`（默认单地域；多地比较场景可逗号分隔传多地域，服务端自动拆子查询）。完整返回 JSON 由脚本**直接落盘**到 `official-docs/search-results/deep_<路名>.json`，脚本随后自动 `json.load` 校验；解析出 0 篇或 JSON 非法会直接报错退出。
-2. **每路返回后，立即单独落盘并校验**：完整返回 JSON 原样保存在 `official-docs/search-results/deep_<路名>.json`，随后立即用 Python `json.load` 校验合法性。**未落盘校验通过前，不得发起下一路**；**不得"先把结果攒在对话里、等整批完成后统一落盘"**——宿主对工具结果有清理机制，延迟落盘的结果会"过期"无法读取，路数越多、越依赖"先攒后写"，越容易整批拿不到结果。
+1. 每路调用 `python3 scripts/deep_query.py "<query>" --area <地域> --json-only --output deep_<任务>_<路名>.json`（需 API Key）。参数：`query`（按 Query 生成原则，**对象+关注方向，不限定到具体文件名/文号**）、`--area`（默认单地域；多地比较场景可逗号分隔传多地域，服务端自动拆子查询）。完整返回 JSON 由脚本**直接落盘**到 `official-docs/search-results/deep_<任务>_<路名>.json`，脚本随后自动 `json.load` 校验；解析出 0 篇或 JSON 非法会直接报错退出。 **落盘文件名必须带任务标识**：同一技能目录可能被多个会话同时使用（宿主并行开窗），只用固定路名（deep_policy.json 等）会被其他会话覆盖，导致转换后篇数与内容错位、素材清单与合并产物对不上；发现文件篇数与预期不符时按覆盖处理、重跑该路。
+2. **每路返回后，立即单独落盘并校验**：完整返回 JSON 原样保存在 `official-docs/search-results/deep_<任务>_<路名>.json`，随后立即用 Python `json.load` 校验合法性。**未落盘校验通过前，不得发起下一路**；**不得"先把结果攒在对话里、等整批完成后统一落盘"**——宿主对工具结果有清理机制，延迟落盘的结果会"过期"无法读取，路数越多、越依赖"先攒后写"，越容易整批拿不到结果。
 3. 运行转换：
 
 ```bash
-python3 scripts/deep_convert.py official-docs/search-results/deep_<路名>.json --area 地域 --purpose "该路搜索目的"
+python3 scripts/deep_convert.py official-docs/search-results/deep_<任务>_<路名>.json --area 地域 --purpose "该路搜索目的"
 ```
 
-4. 转换产物（`result_deep_<路名>.json`）与脚本通道 `--clean` 输出**同构**（顶层 `articles`/`total_articles`/`total_paragraphs`/`search_meta`，段落带自增 `id`）；**含快照/段落标题/发布日期可信度与文章级文号**（writtenText，`deep_convert.py` 映射为「发文字号」，部分政策类文章携带）。脚本解析出 0 篇材料会直接报错退出（不会写入空结果）。
+4. 转换产物（`result_deep_<任务>_<路名>.json`）与脚本通道 `--clean` 输出**同构**（顶层 `articles`/`total_articles`/`total_paragraphs`/`search_meta`，段落带自增 `id`）；**含快照/段落标题/发布日期可信度与文章级文号**（writtenText，`deep_convert.py` 映射为「发文字号」，部分政策类文章携带）。脚本解析出 0 篇材料会直接报错退出（不会写入空结果）。
 
 **阶段二·可信搜索补搜（缺口驱动）**
 
 5. 深度搜索返回**含快照/段落标题/发布日期可信度**（`deep_convert.py` 已保留），文章级文号 **writtenText** 已返回并映射为「发文字号」——**补搜一律按缺口驱动**：关键政策文件/政策原文/数据口径仍缺才补，不再为拿文号而必补；数据/案例按研究资料口径表缺口决定。
 6. 补搜调用 `python3 scripts/dkag_search.py "<query>" --area <地域> --time <时间> --purpose "<搜索目的>" --clean --output result_<路名>.json`（参数见 `reference/search_policy.md` 执行命令节；默认 `segmentCount=4`、`simplified=false`）。返回**立即完整落盘**到 `official-docs/search-results/` 并 `json.load` 校验。
-7. **合并**：阶段一深度产物与阶段二补搜产物用 `merge_search_results.py` 合并后进入素材分类；两阶段产物都纳入溯源核验报告材料面板（同一文件深搜与补搜都召回时字段取并集，文号以非空字段为准）。
+7. **合并**：库内深度产物与补搜产物用 `merge_search_results.py` 合并后进入素材分类；触发降级时，联网模式与宿主 WebSearch 的外部材料经 `websearch_convert.py` 转换后并入同一合并产物（带「非官方来源」标记）；库内产物与降级补入材料都纳入溯源核验报告材料面板（同一文件深搜与补搜都召回时字段取并集，文号以非空字段为准）。
 
-**两阶段共同约束**：
+**阶段三·公开网络检索（联网降级，缺口仍存时）**
+
+8. **触发判据**（任一命中且补搜后仍未闭环）：无结果（关键方向 `articles=[]`）/ 核心事实无直接支撑（政策依据、关键数据、案例做法找不到可支撑正文的内容）/ 结果与任务方向不一致。不得因"有返回条数"就停止降级。
+9. **第一步·联网模式**：`python3 scripts/dkag_search.py "<缺口方向>" --search-channel webSearch --clean --output web_<路名>.json`——返回互联网网页正文段落＋源网址，文章自动标 `非官方来源`（数据权威性=非权威）。
+10. **第二步·宿主 WebSearch**（联网模式仍无支撑时）：用宿主自带 WebSearch 检索，结果落 `official-docs/search-results/websearch_raw.json`（契约 `{"query": "...", "results": [{"title", "url", "content", "published_at"?, "source"?}]}`；无 content/snippet 的条目转换时会丢弃），然后 `python3 scripts/websearch_convert.py official-docs/search-results/websearch_raw.json --query "<检索词>" -o websearch_converted.json`，与库内产物一起 `merge_search_results.py` 合并。
+11. **外部材料口径**：合并后进同一份材料池与溯源核验报告，材料卡带「非官方来源」徽标、正文页顶部有统一提示条；**库内确无该事实、正文又需要时，外部材料可作为事实引用**（正常占角标、同池分类），但只补库内缺失的事实——核心结论以官方为主，不得让外部材料单独支撑"已核验"核心结论；有官方口径时一律用官方口径。用户可见文案统一说「公开网络检索」，不出现"联网模式/宿主 WebSearch/阶段"等内部词。
+
+**三阶段共同约束**：
 
 - 调用失败（Unauthorized/超时/超限等）时，**先串行重试该路一次**——并发多路时的鉴权失败多为 token 竞争瞬态错误，串行重试大概率成功。
-- **深度搜索失败回退**：阶段一某一路深度搜索失败（接口报错/超时/返回 0 篇/JSON 非法，串行重试一次仍失败）时，**仅该路回退用 `dkag_search.py` 可信搜索重搜该路素材类型**，其他路不受影响、不整批回退；回退产物与该路未回退产物一并合并进素材分类。所有路都失败才如实告知用户并暂停等待确认；不得擅自改用 Web 搜索或跳过检索。
+- **深度搜索失败回退**：阶段一某一路深度搜索失败（接口报错/超时/返回 0 篇/JSON 非法，串行重试一次仍失败）时，**仅该路回退用 `dkag_search.py` 可信搜索重搜该路素材类型**，其他路不受影响、不整批回退；回退产物与该路未回退产物一并合并进素材分类。所有路都失败才如实告知用户并暂停等待确认；技术异常不触发联网降级（降级只由素材缺口触发），也不得跳过检索。
 - **长文与精读口径**：召回段落默认 `segmentCount=4`（可调，每篇最多返回该数量的相关段落），**不含全文**。政策依据的条款精读、事实核对以召回段落为准；**不得为"补全政策全文"对整批结果跑 `--full`**。**唯一的 `--full` 用途是参考范文召回**：当某篇召回文章与用户要写的材料高度相似、对其结构或论述逻辑有明显参考价值时，按第四节"参考范文召回流程"取该篇全文作参考——它与范文大纲接口并存、互不替代（大纲给结构建议，参考范文给同类成文的实际写法）。未走参考范文流程而段落不足时，如实告知用户该篇未能获取全文，不得凭印象补写。
 - **通道唯一**：检索统一走脚本通道（`deep_query.py` / `dkag_search.py`），不得混用其他工具；返回落盘按第 2/6 步校验规则执行，不得以落盘麻烦为由绕道。
 
@@ -275,7 +282,7 @@ python3 scripts/dkag_search.py "检索词" --area 地域 --search-channel webSea
 
 - 只学"怎么写"（结构、句式、过渡语），不搬"写了什么"：其中的人名、职务、机构、数字、政策条款一律不得进入正文事实层。
 - 政策依据、数据信息禁用本通道；非官方页面上的转载数据不得使用。
-- 使用前按"数据源 / 源网址域名"判别来源性质并显式标注；与本地 `standards/` 文种标准冲突时一律以本地标准为准（范文站常见过期国标与错误格式细节）。
+- 使用前按"数据源 / 源网址域名"判别来源性质并显式标注；与本地 `reference/standards/*.md` 文种标准冲突时一律以本地标准为准（范文站常见过期国标与错误格式细节）。
 - 范文站内容良莠不齐（AI 生成、拼凑、错字多），只取结构思路，不逐句模仿用语。
 - 自由搜索素材不进入溯源核验报告（不占正文角标、不写入 materials 与 recalled_materials），也不生成知识专库链接；交付说明中如提及，仅表述为"文风参考材料"。
 

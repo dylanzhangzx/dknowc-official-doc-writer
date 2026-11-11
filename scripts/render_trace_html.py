@@ -295,9 +295,14 @@ def source_from_article(item: Dict[str, Any], index: int, segment: Optional[Dict
     _atype = first_str(item.get("文章类型"))
     source["article_type"] = {"policy": "政策文件", "govSite": "政府网站",
                               "affair": "办事事项", "qa": "问答"}.get(_atype, _atype)
-    # 所属搜索条件（多路检索分组）、检索通道（深知深度搜索/深知可信搜索）与引用状态
+    # 所属搜索条件（多路检索分组）、检索通道（深知深度搜索/深知可信搜索/联网检索）与引用状态
     source["search_key"] = first_str(item.get("搜索条件"), item.get("search_key"))
     source["channel"] = first_str(item.get("检索通道"), item.get("channel"))
+    # 外部联网材料（联网检索召回的非官方站点内容）：双口径判定——检索脚本打的
+    # 非官方来源 标记，或接口数据权威性=非权威。材料卡打「非官方来源」徽标，
+    # 正文页加统一提示条；此类材料只作参考线索，不作为政策依据或数据来源。
+    source["unofficial"] = bool(item.get("非官方来源")) or str(
+        item.get("数据权威性") or item.get("authority") or "").strip() in ("非权威", "non-authoritative")
     source["used"] = item.get("已引用", item.get("used", True))
     if not isinstance(source["used"], bool):
         source["used"] = True
@@ -644,6 +649,7 @@ def compute_process_stats(sources: List[Dict[str, str]], answer: str,
     n_searches = len(cond_rows) or (1 if sources else 0)
     deep_routes = sum(1 for r in cond_rows if "深度" in r.get("channel", ""))
     trusted_routes = sum(1 for r in cond_rows if "可信" in r.get("channel", ""))
+    web_routes = sum(1 for r in cond_rows if "公开网络" in r.get("channel", ""))
     # 有逐次调用记录时，按真实调用次数统计（同一方案项的深搜与补搜共用 purpose，
     # 按分组主通道统计会把补搜吞掉——否则补搜会被吞掉）
     records = search_records or []
@@ -652,9 +658,15 @@ def compute_process_stats(sources: List[Dict[str, str]], answer: str,
         return ("深度" in str(r.get("channel") or "")
                 or str(r.get("file") or "").split("/")[-1].startswith("deep_"))
 
+    def _is_web_record(r: Dict[str, Any]) -> bool:
+        # 公开网络检索＝外部联网补充路（联网模式与外部转换产物）；联网模式同时带
+        # "可信"字样，先判外部、再从可信计数中排除，避免重复计数
+        return "公开网络" in str(r.get("channel") or "")
+
     if records:
         deep_routes = sum(1 for r in records if _is_deep_record(r))
-        trusted_routes = len(records) - deep_routes
+        web_routes = sum(1 for r in records if _is_web_record(r))
+        trusted_routes = len(records) - deep_routes - web_routes
         n_searches = len(records)
         # 把真实调用挂回各方案组（同一 purpose 的深搜与补搜共用 key）：
         # 明细行据此标注“深度搜索 + 可信补搜 N 次”，并展示补搜 query。
@@ -685,6 +697,7 @@ def compute_process_stats(sources: List[Dict[str, str]], answer: str,
         "n_searches": n_searches,
         "deep_routes": deep_routes,
         "trusted_routes": trusted_routes,
+        "web_routes": web_routes,
         "has_cond_detail": bool(cond_rows),
         "n_materials": len(sources),
         "used_count": used_count,
@@ -1037,6 +1050,7 @@ def build_chip_data(sources: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
             "dead": bool(source.get("link_dead")),
             "excerpt": (source.get("excerpt") or "").strip(),
             "segments": source.get("segments") or [],
+            "unofficial": bool(source.get("unofficial")),
         }
     return chip_map
 
@@ -1190,6 +1204,9 @@ def render_src_card(jb: Dict[str, str], cid: str, dup: bool = False) -> str:
     title = re.sub(r"<br\s*/?>", " ", str(jb.get("title") or ""), flags=re.I)
     excerpt = (jb.get("excerpt") or "").strip()
     dup_cls = " dup-card" if dup else ""
+    # 非官方来源徽标（外部联网材料）：句后溯源卡头部逐条标注，与材料卡同款样式
+    unofficial_html = ('<span class="sc-unofficial" title="该材料来自公开网络检索，非官方来源">非官方来源</span>'
+                       if jb.get("unofficial") else "")
     link_html = (f'<a class="src-link" href="{esc(url)}" target="_blank" rel="noopener noreferrer">查看全文{ARROW_SVG}</a>' if url else "")
     toggle_html = (f'<button class="src-toggle" type="button"><span class="more">展开</span>'
                    f'<span class="less">收起</span>{CARET_SVG}</button>' if excerpt else "")
@@ -1197,7 +1214,7 @@ def render_src_card(jb: Dict[str, str], cid: str, dup: bool = False) -> str:
     return (
         f'<figure class="src-card{dup_cls}" data-cite="{esc(cid)}">'
         f'<div class="src-head"><span class="src-ico" aria-hidden="true">{SRC_ICO_SVG}</span>'
-        f'<figcaption class="src-title">{esc(title)}</figcaption></div>'
+        f'<figcaption class="src-title">{esc(title)}</figcaption>{unofficial_html}</div>'
         f'<div class="src-meta"><span class="src-site" title="{esc(src)}"><span class="dot"></span>{esc(src)}</span>'
         f'{link_html}{toggle_html}</div>{body_html}</figure>'
     )
@@ -1344,10 +1361,15 @@ def render_source_card(source: Dict[str, str], for_print: bool = False) -> str:
     if source.get("conf") == "高":
         conf_badge = ('<span class="sc-conf" title="发布日期可信度：高。内容经模型治理入库，'
                       '标题为模型从原文动态抽取，非规则提取">高可信</span>')
+    # 非官方来源徽标：外部联网材料逐条标注；正文事实层不得以其为政策依据/数据来源
+    unofficial_badge = ""
+    if source.get("unofficial"):
+        unofficial_badge = ('<span class="sc-unofficial" title="该材料来自公开网络检索，非官方来源；'
+                            '仅作参考线索，不作为政策依据或数据来源">非官方来源</span>')
     # 已引用材料显示角标编号；未引用召回材料显示"未引用"灰标（不占正文角标号）
     id_html = f'<span class="sc-id">[{esc(source["id"])}]</span>' if source.get("used", True) else '<span class="sc-unused">未引用</span>'
     body_html = (f'<div class="sc-head">{id_html}'
-                 f'<span class="sc-type">{esc(source["type_label"])}</span>{conf_badge}{vk}</div>'
+                 f'<span class="sc-type">{esc(source["type_label"])}</span>{conf_badge}{unofficial_badge}{vk}</div>'
                  f'<h4>{esc(source.get("title"))}</h4>'
                  f'<div class="sc-meta">{esc(meta)}</div>'
                  f'{note_html}'
@@ -1372,6 +1394,7 @@ def render_process_bar(stats: Dict[str, Any], verification: Dict[str, Any]) -> s
     # 无通道信息（历史 JSON）时退回"深知检索 N 次"
     deep_n = stats.get("deep_routes", 0)
     trusted_n = stats.get("trusted_routes", 0)
+    web_n = stats.get("web_routes", 0)
     if deep_n and trusted_n:
         step1_title = f"深度搜索 {deep_n} 路 · 可信补搜 {trusted_n} 次"
     elif deep_n:
@@ -1380,6 +1403,8 @@ def render_process_bar(stats: Dict[str, Any], verification: Dict[str, Any]) -> s
         step1_title = f"深知可信搜索 {trusted_n} 次"
     else:
         step1_title = f"深知检索 {stats['n_searches']} 次"
+    if web_n:
+        step1_title += f" · 公开网络检索 {web_n} 次"
     def _cond_channel_label(row: Dict[str, Any]) -> str:
         """按真实调用标注方案组通道；无逐次记录时退回组内多数通道。"""
         if "deep_calls" in row or "trusted_calls" in row:
@@ -1392,6 +1417,8 @@ def render_process_bar(stats: Dict[str, Any], verification: Dict[str, Any]) -> s
                 parts.append(f"可信补搜 {t} 次")
             return " + ".join(parts)
         ch = row.get("channel", "")
+        if "公开网络" in ch:
+            return "公开网络检索"
         if "深度" in ch and "可信" in ch:
             return "深度搜索+可信搜索"
         if "深度" in ch:
@@ -1802,6 +1829,10 @@ a.jb-quote{text-decoration:none}
   padding:1px 7px;flex:none}
 .sc-conf{font-size:10.5px;font-weight:800;color:#8a5a00;background:var(--case-soft);border:1px solid #e6cf8f;
   border-radius:4px;padding:0 7px;flex:none}
+.sc-unofficial{font-size:10.5px;font-weight:800;color:#b45309;background:#fff7ed;border:1px solid #f5c98a;
+  border-radius:4px;padding:0 7px;flex:none}
+.ext-notice{margin:0 0 14px;padding:9px 14px;background:#fff7ed;border:1px solid #f5c98a;border-left:4px solid #b45309;
+  border-radius:8px;color:#7c4a03;font-size:12.8px;line-height:1.7}
 .scard h4{margin:0 0 5px;font-size:14.5px;color:var(--ink);line-height:1.55}
 .sc-meta{font-size:11.5px;color:var(--muted)}
 /* 标题链面包屑（模型生成的结构化位置，核验核心抓手）与多段分块 */
@@ -2367,6 +2398,11 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
     question_text = (question_override or "").strip()
     orig_q_html = (f'<div class="orig-q" title="{esc(question_text)}"><b>原问题</b>：{esc(question_text)}</div>'
                    if question_text and question_text != display_title else "")
+    # 正文页统一提示条：本次材料池含外部联网（非官方来源）材料时显示一次；
+    # 具体哪篇见溯源核验报告/知识专库中的「非官方来源」徽标
+    unofficial_notice = ('<div class="ext-notice">本次检索补充了公开网络材料，已在溯源核验报告中'
+                        '逐条标注「非官方来源」；此类材料仅作参考线索，不作为政策依据或数据来源。</div>'
+                        if any(s.get("unofficial") for s in sources) else "")
 
     jb_tables_json = dumps_for_script(jb_tables)
     jb_tables_script = (f'<script type="application/json" id="jb-tables">{jb_tables_json}</script>\n'
@@ -2378,9 +2414,10 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
 
     meta_bits = []
     if process_stats["n_searches"]:
-        # 检索计数按接口通道拆分显示（深度搜索与可信搜索是两个接口来源）
+        # 检索计数按接口通道拆分显示（深度搜索与可信搜索是两个接口来源；公开网络为外部补充）
         _deep_n = process_stats.get("deep_routes", 0)
         _trusted_n = process_stats.get("trusted_routes", 0)
+        _web_n = process_stats.get("web_routes", 0)
         if _deep_n and _trusted_n:
             meta_bits.append(f"深度搜索 {_deep_n} 路 · 可信补搜 {_trusted_n} 次")
         elif _deep_n:
@@ -2389,6 +2426,8 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
             meta_bits.append(f"深知可信搜索 {_trusted_n} 次")
         else:
             meta_bits.append(f"深知检索 {process_stats['n_searches']} 次")
+        if _web_n:
+            meta_bits.append(f"公开网络检索 {_web_n} 次")
     if sources:
         meta_bits.append(f"知识专库文章 {len(sources)} 篇")
     if process_stats["n_cite_marks"]:
@@ -2400,8 +2439,11 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
     _channels: List[str] = []
     for s in sources:
         _ch = (s.get("channel") or "").strip()
-        # 通道可能为顿号拼接的多值（同一材料被两接口召回），拆分后逐 token 汇总
-        for token in [t.strip() for t in _ch.split("、") if t.strip()]:
+        # 通道可能为顿号拼接的多值（同一材料被两接口召回），拆分后逐 token 汇总；
+        # 内部通道名转用户可见口径（不出现"宿主 WebSearch""联网模式"等内部词）
+        _display = {"宿主 WebSearch（公开网络）": "公开网络检索",
+                    "深知可信搜索·联网": "深知可信搜索"}.get(_ch, _ch)
+        for token in [t.strip() for t in _display.split("、") if t.strip()]:
             if token not in _channels:
                 _channels.append(token)
     source_line = " · ".join(_channels) if _channels else "深知可信搜索"
@@ -2444,6 +2486,7 @@ def render_html(payload: Dict[str, Any], title: str, answer_override: str = "", 
 <div class="app container" data-view="report">
   <main class="view" id="view-body" aria-label="正文">
     <h2 class="paper-title">{esc(display_title)}</h2>
+    {unofficial_notice}
     <div class="doc-paper">
     {render_section_cards(clean_sections, sources, with_ids=True, id_prefix="sec")}
     </div>

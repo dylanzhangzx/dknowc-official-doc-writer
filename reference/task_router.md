@@ -133,8 +133,8 @@ Pipeline：
 - 范文大纲工具/接口失败、超时或返回无可用大纲时，不中断任务，不生成替代大纲，不进入大纲确认，直接按原流程继续。
 - 需要政策、数据、案例支撑时，遵循 `reference/search_policy.md`，先展示搜索方案并等待用户确认。
 - 短公文没有明确依据需求时，默认不做大规模检索；调研报告、政策研究报告和产业研究报告才使用较完整的政策、数据、案例检索。
-- 用户确认搜索方案后，只能走深知脚本通道，**两阶段**：阶段一用 `scripts/deep_query.py`（返回经 `scripts/deep_convert.py` 转换），阶段二补搜用 `scripts/dkag_search.py`；全程不混用其他通道。不得使用 Web Search、Web Fetch、浏览器搜索或公开网页抓取替代。
-- 深知搜索异常、空结果或素材不足时，先暂停请用户确认下一步，不得自行切换外部搜索。
+- 用户确认搜索方案后，库内检索走深知脚本通道：首轮用 `scripts/deep_query.py`（返回经 `scripts/deep_convert.py` 转换），补搜用 `scripts/dkag_search.py`；库内补搜后核心事实仍无支撑（无结果/无直接支撑/方向不一致）时，按 `reference/search_policy.md` 的**三阶段降级链**继续——先联网模式（`dkag_search.py --search-channel webSearch`），仍无支撑再走宿主 WebSearch（`websearch_convert.py` 转换 + `merge_search_results.py` 合并，外部材料带「非官方来源」标记）；不得跳过降级链直接手抓网页。
+- 深知搜索**技术异常**（报错/限流/超时）时，先暂停请用户确认下一步；**空结果与素材缺口不是异常**，按三阶段降级链处理。
 - 搜索返回 `quota_exhausted=true`（积分/余额用尽）时禁止任何重试，立即引导用户到 MaaS 平台 `https://platform.dknowc.cn/auth/#/login` 实名认证再领积分或充值；未确认处理前不再调用搜索。
 - **交付形态按第二节两个开关判定**：命中公文范式 → 生成 `.docx`；执行过搜索 → 生成产出物 HTML（`XXX.html`，三页）。两者可同时成立。如生成临时 Markdown 草稿，必须直接继续生成最终产物，不得先把正文或 `.md` 发给用户。
 - 只有用户明确要求红头文件、红头版、套红头或生成红头时，才在普通 Word 基础上调用红头脚本。

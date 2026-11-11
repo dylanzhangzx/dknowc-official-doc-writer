@@ -114,9 +114,12 @@ def map_article_fields(art: dict) -> dict:
         "search_key": (first_value(art, ("搜索目的", "purpose"))
                        or first_value(art, SEL_SEARCH_KEY_FIELDS)
                        or "其他检索"),
-        # 检索通道（深知深度搜索 / 深知可信搜索）：由 deep_convert / dkag_search 打标，
-        # 溯源报告据此区分两个接口来源与各自检索路数
+        # 检索通道（深知深度搜索 / 深知可信搜索 / 联网检索）：由 deep_convert / dkag_search /
+        # websearch_convert 打标，溯源报告据此区分接口来源与各自检索路数
         "检索通道": first_value(art, ("检索通道",)),
+        # 外部联网材料标记：溯源报告据此打「非官方来源」徽标（联网检索/宿主 WebSearch 路）
+        "非官方来源": True if art.get("非官方来源") else "",
+        "数据权威性": first_value(art, ("数据权威性", "authority")),
     }
 
 

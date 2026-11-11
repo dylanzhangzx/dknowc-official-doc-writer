@@ -10,7 +10,7 @@ python3 scripts/initialize.py
 
 初始化用于检查 Python、`python-docx`、`requests` 等基础运行环境，不要求用户提供单位或个人信息，也不上传检测结果。初始化不是 API Key 硬性门禁：只有当当前任务确实需要调用深知搜索时，API Key 才是前置条件。
 
-**素材检索与范文大纲一律走本 Skill 脚本通道**（`deep_query.py` / `dkag_search.py` / `outline_reference.py`），需要 API Key；MCP「深知可信工作台」通道当前未启用。素材检索按**两阶段执行**：首轮用 `deep_query.py` 做**深度搜索广度召回**（3 路按素材类型，query 用「对象+关注方向」句式），返回 JSON 落盘后运行 `python3 scripts/deep_convert.py` 转换；补搜用 `dkag_search.py` 做**可信搜索精准补强**（深度搜索含快照/段落标题/可信度与文章级文号 writtenText；补搜按缺口驱动，不再为拿文号而必补）。范文大纲用 `outline_reference.py`。深度搜索与可信搜索的返回都**立即完整原样落盘**并 `json.load` 校验后再转换，研究资料、溯源 JSON 整理与核验报告全部按现有流程执行（深度产物含快照/段落标题/可信度与文章级文号；补搜产物四字段完整）。搜索与大纲失败时先串行重试该路一次（鉴权竞争多为瞬态）；任一路额度用尽（`quota_exhausted=true`）整批停止、禁止任何重试、引导 MaaS 平台；重试仍失败才如实告知用户并暂停等待确认，不得擅自改用 Web 搜索或跳过检索。
+**素材检索与范文大纲一律走本 Skill 脚本通道**（`deep_query.py` / `dkag_search.py` / `outline_reference.py`），需要 API Key；MCP「深知可信工作台」通道当前未启用。素材检索按**三阶段降级链执行**（库内两轮：深度搜索＋可信补搜，其后公开网络降级）：首轮用 `deep_query.py` 做**深度搜索广度召回**（3 路按素材类型，query 用「对象+关注方向」句式），返回 JSON 落盘后运行 `python3 scripts/deep_convert.py` 转换；补搜用 `dkag_search.py` 做**可信搜索精准补强**（深度搜索含快照/段落标题/可信度与文章级文号 writtenText；补搜按缺口驱动，不再为拿文号而必补）。范文大纲用 `outline_reference.py`。深度搜索与可信搜索的返回都**立即完整原样落盘**并 `json.load` 校验后再转换，研究资料、溯源 JSON 整理与核验报告全部按现有流程执行（深度产物含快照/段落标题/可信度与文章级文号；补搜产物四字段完整）。搜索与大纲失败时先串行重试该路一次（鉴权竞争多为瞬态）；任一路额度用尽（`quota_exhausted=true`）整批停止、禁止任何重试、引导 MaaS 平台；重试仍失败才如实告知用户并暂停等待确认；库内核心事实仍无支撑（素材缺口）时按 `reference/search_policy.md` 三阶段降级链处理，不得手抓网页绕过管线。
 
 ### 不需要搜索的任务
 

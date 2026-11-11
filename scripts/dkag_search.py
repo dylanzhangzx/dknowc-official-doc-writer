@@ -229,7 +229,7 @@ def load_config(config_path: Optional[Path] = None) -> dict:
     }
 
 
-def clean_dkag_response(api_response: dict) -> dict:
+def clean_dkag_response(api_response: dict, search_channels: Optional[list[str]] = None) -> dict:
     """
     清洗 DKAG API 返回的数据
 
@@ -274,15 +274,23 @@ def clean_dkag_response(api_response: dict) -> dict:
         global_id_counter = 1
 
         for art in articles:
+            # 联网检索模式（--search-channel webSearch）召回的是互联网网页材料：
+            # 通道标"深知可信搜索·联网"区分于库内路，并统一打 非官方来源 标记
+            # （接口 dataAuthority 未返回数据权威性时兜底）——溯源报告据此打徽标。
+            _is_web_channel = bool(search_channels) and "webSearch" in search_channels
             cleaned_art = {
                 "文章标题": art.get("文章标题", "无标题"),
                 "发布日期": art.get("发布日期", ""),
                 "数据源": art.get("数据源", "未知来源"),
                 "段落": [],
                 # 检索通道标记：本产物来自深知可信搜索（V2 生产入口）。
-                # 溯源报告据此区分"深度搜索 / 可信搜索"两个接口来源与各自路数。
-                "检索通道": "深知可信搜索",
+                # 溯源报告据此区分"深度搜索 / 可信搜索 / 可信搜索·联网"来源与各自路数。
+                "检索通道": "深知可信搜索·联网" if _is_web_channel else "深知可信搜索",
             }
+            if _is_web_channel:
+                cleaned_art["非官方来源"] = True
+            if art.get("数据权威性"):
+                cleaned_art["数据权威性"] = str(art["数据权威性"]).strip()
             for key in ("源网址", "sourceUrl", "source_url", "原文链接", "原文地址", "文章链接", "url", "URL"):
                 if art.get(key):
                     cleaned_art["源网址"] = str(art[key]).strip()
@@ -502,6 +510,10 @@ def dkag_search(
 
     if normalized_search_channels:
         payload["searchChannel"] = normalized_search_channels
+        # 联网检索模式自动请求文章级 数据权威性 标注（联网结果为"非权威"），
+        # 供溯源报告打「非官方来源」徽标；库内检索不受影响。
+        if "webSearch" in normalized_search_channels:
+            payload["dataAuthority"] = True
 
     # 构建请求头
     headers = {
@@ -600,7 +612,7 @@ def dkag_search(
 
         # 如果需要清洗数据
         if clean:
-            cleaned_result = clean_dkag_response(result)
+            cleaned_result = clean_dkag_response(result, search_channels=search_channels)
             cleaned_result["search_meta"] = search_meta
             cleaned_result["tid"] = search_meta.get("tid")
             attach_knowledge_base_aliases(cleaned_result, knowledge_base_url or cleaned_result.get("knowledgeBase", ""))
