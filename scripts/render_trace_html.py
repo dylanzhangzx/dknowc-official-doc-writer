@@ -252,15 +252,11 @@ def source_from_article(item: Dict[str, Any], index: int, segment: Optional[Dict
             vo.get("title"),
             "未命名来源文章",
         ),
+        # 来源卡只展示发文机构：发布或实施机构 → 发布机关。
+        # 不回退到站点/数据源名称，避免把转载网站或内部流水标签当成发文机关展示。
         "agency": first_str(
-            item.get("unit") if not isinstance(item.get("unit"), list) else "、".join(str(x) for x in item.get("unit")[:3]),
-            item.get("sourceElement"),
-            item.get("数据源"),
             item.get("发布或实施机构"),
             item.get("发布机关"),
-            item.get("来源"),
-            vo.get("typeName"),
-            vo.get("sourceName"),
         ),
         "date": first_str(item.get("发布日期"), item.get("date"), item.get("发布时间"), item.get("createDate"), vo.get("dateTime"), vo.get("createDate")),
         "url": first_str(item.get("sourceUrl"), item.get("source_url"), item.get("源网址"), item.get("原文链接"), item.get("url"), item.get("原文"), vo.get("sourceUrl"), vo.get("url")),
@@ -1340,7 +1336,7 @@ def render_source_card(source: Dict[str, str], for_print: bool = False) -> str:
         vk = f'<span class="sc-vk warn">◐ {reason}</span>'
         note_html = ""
     links = render_source_links(source.get("url"), source.get("policy_url", ""), source.get("snapshot", ""), source.get("link_dead", False))
-    # 关键性行：有文号（接口 policyFiles 匹配）时"文号 · 数据源 · 日期"，否则"数据源 · 日期"。
+    # 关键性行：有文号（接口 policyFiles 匹配）时"文号 · 发文机构 · 日期"，否则"发文机构 · 日期"。
     # 文号必须是标准格式（〔年份〕序号）；描述性文字（"XX印发"类自造描述）不显示，当无文号处理。
     _dn = source.get("doc_number") or ""
     # 只显示标准文号形式，拦掉模型自造的描述性文字（"中办、国办 2026 年印发"类）。
