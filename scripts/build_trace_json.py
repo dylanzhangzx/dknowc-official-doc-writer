@@ -275,6 +275,21 @@ def load_citation_records(path: Optional[Path], body: str, material_count: int) 
     return ordered
 
 
+def require_inside(path_value: str, label: str) -> Path:
+    """输入路径必须落在本技能目录内（official-docs 之下），否则拒绝读取。
+
+    关标统一由脚本自身定位，不接受目录外的绝对路径，避免把任意文件读进产物。
+    """
+    path = Path(path_value).expanduser().resolve()
+    allowed = [(SKILL_ROOT / "official-docs").resolve()]
+    if not any(path.is_relative_to(base) for base in allowed):
+        raise SystemExit(
+            f"错误：{label} 必须位于 {SKILL_ROOT / 'official-docs'} 之内，当前为 {path}。"
+        )
+    if path.suffix.lower() != ".json" and label != "问题文件":
+        raise SystemExit(f"错误：{label} 必须是 JSON 文件：{path}")
+    return path
+
 def resolve_selected_index(selected: list, by_title: dict, by_url: dict) -> list:
     """为清单每条定位合并产物文章；返回 (条目, 文章或None)。"""
     resolved = []
@@ -339,10 +354,10 @@ def main() -> int:
     if not (args.materials_list and args.body_file and args.merged_json):
         raise SystemExit("用法：python3 scripts/build_trace_json.py <素材清单> <正文文件> <合并产物JSON> --title <标题> --output <溯源JSON>")
 
-    materials_list = load_json(Path(args.materials_list).expanduser())
+    materials_list = load_json(require_inside(args.materials_list, "素材清单"))
     question_text = (args.question or "").strip()
     if args.question_file:
-        question_path = Path(args.question_file).expanduser()
+        question_path = require_inside(args.question_file, "问题文件")
         try:
             question_text = question_path.read_text(encoding="utf-8").strip()
         except OSError as exc:
@@ -357,7 +372,7 @@ def main() -> int:
             "请先保存到 official-docs/input/ 后再装配溯源 JSON。"
         )
     body = body_path.read_text(encoding="utf-8")
-    merged = load_json(Path(args.merged_json).expanduser())
+    merged = load_json(require_inside(args.merged_json, "合并产物"))
 
     selected = materials_list.get("selected") or []
     if not selected:

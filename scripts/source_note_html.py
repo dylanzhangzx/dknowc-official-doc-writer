@@ -45,14 +45,23 @@ def discover_merged_data(trace: dict) -> dict | None:
     """加载该任务装配时记录的合并产物，用于比对 quote 是否真在该材料原文里。
 
     只认 trace["merged_json"] 指向的文件（避免拿别的任务的合并产物误判）；
-    未记录或读不到时返回 None，跳过原文比对，其余校验照常执行。
+    路径必须落在本技能 official-docs（search-results / input）之内——越界一律不读，
+    防止溯源 JSON 里写任意绝对路径把别的文件读进来。未记录、越界或读不到时返回 None，
+    调用方按"缺合并产物"处理（有角标时拒绝渲染）。
     """
     raw = str(trace.get("merged_json") or "").strip()
     if not raw:
         return None
-    path = Path(raw).expanduser()
-    if not path.is_absolute():
-        path = (SKILL_ROOT / path).resolve()
+    try:
+        path = Path(raw).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return None
+    allowed = [(SKILL_ROOT / "official-docs" / "search-results").resolve(),
+               (SKILL_ROOT / "official-docs" / "input").resolve()]
+    if path.suffix.lower() != ".json":
+        return None
+    if not any(path.is_relative_to(base) for base in allowed):
+        return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

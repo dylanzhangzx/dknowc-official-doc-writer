@@ -32,13 +32,13 @@ python3 scripts/initialize.py
 - 用户拒绝后不纠缠；交付后轻提示每个任务最多一次。
 - 手机号全程脱敏显示。
 
-MaaS 注册三步执行（初始化输出 `guide_message` 已含引导话术）。平台要求 Agent 先答一道文字题再发码，题目由 Agent 当场计算，**不把题目发给用户**：
+MaaS 注册三步执行（初始化输出 `guide_message` 已含引导话术）。**默认走固定通行密钥通道**：脚本携带本渠道固定通行密钥直接申请验证码，不需要领题作答；密钥失效或通道不可用时自动回落原有领题流程，对用户等价：
 
 ```bash
 node scripts/register.mjs challenge --phone <手机号>
 ```
 
-challenge 读取官方注册指引并领题，只调用一次、不自动重试，按退出码与 JSON 分流。**平台回退自动兜底**：若官方指引不可用（文字题接口尚未上线，或平台临时回退到旧版发码接口），challenge 自动改走原有短信直发分支——退出 0 即表示验证码已发送（`code:"SMS_SENT"`），此路径**不需要调用 answer**，直接等用户 6 位验证码；退出 2 为人工验证链接。输出字段 `flow` 为 `agent-text` 表示走文字题流程，为 `legacy` 表示走旧发码分支，两种对用户等价：
+`challenge` 只调用一次、不自动重试。**主线（`flow:"key"`）**：成功退出 0、`code:"SMS_SENT"`，直接等用户提供 6 位验证码，不需要调用 answer；限频（`SMS_RATE_LIMIT`，带剩余秒数）、号码被拒（`SMS_REQUEST_REJECTED`）、结果未确认（`RESULT_UNKNOWN`）按 `user_message` 停点，不自动重试。**回落分支**：密钥失效/停用时输出带 `keyFallback` 原因，转为下面的领题流程。领题读取官方注册指引，**平台回退自动兜底**：若官方指引不可用（文字题接口尚未上线，或平台临时回退到旧版发码接口），challenge 自动改走原有短信直发分支——退出 0 即表示验证码已发送（`code:"SMS_SENT"`），此路径**不需要调用 answer**，直接等用户 6 位验证码；退出 2 为人工验证链接。输出字段 `flow` 为 `agent-text` 表示走文字题流程，为 `legacy` 表示走旧发码分支，两种对用户等价：
 
 - **退出 0（`status:true`）**：JSON 里带 `<question>.prompt` 与 `answerFormat`。直接按题意计算，用非负整数调用下一步；**题目、token、答题过程都不进入对话**。若返回 `reused:true`，表示本机已有同一手机号未过期的题目，直接沿用，不重新请求。
 - **退出 2（`code:"HUMAN_REQUIRED"`）**：平台要求人工完成图片验证，转述脚本 `user_message`（含经校验的验证链接），暂停自动流程，等持有人完成验证并提供短信验证码。链接一次性、约 10 分钟有效，仅私下展示给手机号持有人，不得拼改、转发或贴群。
@@ -60,7 +60,12 @@ answer 提交答案；答对即申请发码，按退出码分流：
 node scripts/register.mjs register --phone <手机号> --vcode <验证码> --organ 个人 --name 用户
 ```
 
-成功后转述脚本 `user_message`（积分到账轻确认；`existed=true` 时为老用户找回话术；`pending=true` 时为密钥准备中话术——非错误，不重新注册、不重新发码，等用户示意后用同一手机号与同一验证码重试一次，短信码 5 分钟内有效），并按 `envWriteSucceeded` 处理：**为 true** 时脚本已把 Key 写入本机专用配置文件（`~/.config/dknowc/api_key`），直接用返回的 Key 重跑初始化确认后继续原任务；**为 false** 时以脚本返回的 `apiKey` 临时注入环境变量（`DKNOWC_API_KEY=<key> python3 scripts/initialize.py`）完成本次任务，不得据此判定注册失败、不得重复走手机号流程。不得向用户展示完整 Key。默认不重新生成 Key，仅用户明确要求时追加 `--new-key`。注册失败按脚本 `user_message` 处理；连续失败降级引导 `https://platform.dknowc.cn/auth/#/login`。
+成功后转述脚本 `user_message`（积分到账轻确认；`existed=true` 时为老用户找回话术；`pending=true` 时为密钥准备中话术——非错误，不重新注册、不重新发码，等用户示意后用同一手机号与同一验证码重试一次，短信码 5 分钟内有效），并按脚本的落盘结果处理（脚本任何分支都**不返回明文 Key**，只给掩码与文件路径）：
+- `envWriteSucceeded=true`：Key 已写入本机专用配置文件（`~/.config/dknowc/api_key`），直接运行 `python3 scripts/initialize.py` 确认后继续原任务；
+- `envWriteSucceeded=false` 且 `fallbackWriteSucceeded=true`：主配置写不进（宿主只读/权限受限），脚本已把 Key 写入兜底凭据文件（`~/.config/dknowc/api_key.fallback`，600 权限），读取链自动兜底——**同样直接运行 `python3 scripts/initialize.py`**，不要去找"返回的 Key"，也不要改写话术；
+- 两者都为 false：Key 没有落到本机（`envWriteInstruction` 已说明原因），此时**不要重复注册、不要重发验证码**，按 `envWriteInstruction` 引导用户到平台用手机号验证码登录查看，或稍后重试；
+- `--no-write`：按验证链路使用，不落盘也不返回明文。
+不得向用户展示完整 Key，也不得从脚本输出里寻找明文 Key（不存在该字段）。默认不重新生成 Key，仅用户明确要求时追加 `--new-key`。注册失败按脚本 `user_message` 处理；连续失败降级引导 `https://platform.dknowc.cn/auth/#/login`。
 
 领题状态由脚本自行保存（`~/.config/dknowc/maas_agent_challenge.json`，600 权限，含会话 Cookie、题目与 attempt），challenge 与 answer 之间不需要也不允许手工传 token；发码成功、转人工或终态失败后脚本自动清除。同一手机号存在未过期题目时复用，不重复领题。
 

@@ -380,21 +380,12 @@ def check_update() -> dict:
                 "是否现在升级？确认后我先完成升级再继续处理你的任务；"
                 "选择跳过则这个版本不再提醒、直接继续你的任务。"
             )
-            # instruction：脚本输出指令（与 user_message 同级约束）——弱模型对远距离义务
-            # （读规则与履约之间隔着整个任务）容易丢失，必须在输出内自带即时行为指令；
-            # 命令一律给绝对路径（按抄执行不依赖当前目录），并覆盖升级失败分支。
+            # action：枚举值，只表达状态，不承载行为指令。message 是本地固定模板（仅用于展示）；
+            # 是否提示、如何提示由 SKILL.md「版本自检与引导升级」的固定流程规定，不由数据驱动。
+            # 升级命令一律给绝对路径（按抄执行不依赖当前目录），并覆盖升级失败分支。
             updater = str(Path(__file__).resolve().parent / "update_skill.py")
-            result["instruction"] = (
-                "【开始执行用户任务前必须先履行】现在就向用户原样转述上述 message 征询是否升级"
-                "（每个会话最多提示一次），得到答复前不得开始处理任务。用户同意→运行 "
-                f"python3 \"{updater}\" --yes 并向用户转述输出中的 user_message，"
-                "升级完成后继续用户任务；用户拒绝或跳过→运行 "
-                f"python3 \"{updater}\" --decline（静默记录，无需转述），"
-                "随后直接继续用户任务，本会话不再提及版本话题。"
-                "升级脚本退出码非 0 时（2 无更新／3 下载或验包失败／4 已自动回滚）："
-                "如实向用户转述其 user_message 后直接继续用户原任务（当前版本功能完好），"
-                "不重试、不手工下载替换，本会话不再提及版本话题。"
-            )
+            result["action"] = "prompt_update"
+            result["updater_path"] = updater
     except Exception:
         result["reason"] = result["reason"] or "error"
     return result
@@ -434,10 +425,11 @@ def main():
     result["profile_saved"] = args.save
     result["profile_path"] = "config/user_profile.json" if args.save else None
     result["environment_state_path"] = "config/environment_state.json"
-    # update：版本自检结果。update_available=true 时 Agent 在开始执行用户任务前
-    # 原样转述 message 征询（每会话最多一次；用户拒绝则运行 update_skill.py --decline
-    # 静默记录）；checked=false（网络不可达/停用/渠道除外/reason=declined）时
-    # 不得向用户提及版本话题，直接继续原任务。
+    # update：版本自检结果（数据，不是指令）。update_available=true 且 action="prompt_update"
+    # 时，按 SKILL.md「版本自检与引导升级」的固定流程在开始任务前提示一次并询问用户
+    # （每会话最多一次；用户拒绝则运行 update_skill.py --decline 静默记录）；
+    # checked=false（网络不可达/停用/渠道除外/reason=declined）时
+    # 不向用户提及版本话题，直接继续原任务。
     result["update"] = check_update()
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
