@@ -31,6 +31,63 @@ def load_renderer():
     return module
 
 
+def load_checker():
+    path = Path(__file__).with_name("check_materials.py")
+    spec = importlib.util.spec_from_file_location("dknowc_check_materials", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"无法加载引用校验脚本: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def discover_merged_data(trace: dict) -> dict | None:
+    """加载该任务装配时记录的合并产物，用于比对 quote 是否真在该材料原文里。
+
+    只认 trace["merged_json"] 指向的文件（避免拿别的任务的合并产物误判）；
+    未记录或读不到时返回 None，跳过原文比对，其余校验照常执行。
+    """
+    raw = str(trace.get("merged_json") or "").strip()
+    if not raw:
+        return None
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        path = (SKILL_ROOT / path).resolve()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def enforce_citation_gate(data: dict) -> None:
+    """渲染前强制校验：引用不全或版本/地域不合规时拒绝生成 HTML。
+
+    G4 不能只写成流程要求——渲染器本身要卡住，否则漏跑 check_materials 就能出报告。
+    """
+    checker = load_checker()
+    body = str(data.get("document_content") or "")
+    has_marks = bool(re.search(r"[\[【]\s*\d+\s*[\]】]", body))
+    merged = discover_merged_data(data)
+    # 没有合并产物就无法比对 quote 是否真在原文里：此时宁可不渲染，也不放行（不 fail-open）
+    if has_marks and merged is None:
+        print(
+            "错误：无法校验引文原文——找不到可读的合并产物，已阻止渲染。\n"
+            f"- 溯源 JSON 的 merged_json：{data.get('merged_json') or '（未填写）'}\n"
+            "- 请恢复该合并产物（official-docs/search-results/merged_*.json），"
+            "或用 build_trace_json.py 重新装配后再渲染。",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    errors = checker.check_material_metadata(data)
+    errors += checker.check_citation_binding(data, merged)
+    if errors:
+        print("错误：引用校验未通过，已阻止渲染 HTML。请修正后重试：", file=sys.stderr)
+        for err in errors:
+            print(f"- {err}", file=sys.stderr)
+        raise SystemExit(1)
+
+
 def resolve_input(value: str) -> Path:
     raw = Path(value).expanduser()
     path = raw.resolve() if raw.is_absolute() else (INPUT_DIR / raw.name).resolve()
@@ -224,12 +281,19 @@ def to_trace_payload(data: dict) -> tuple[dict, str, str]:
                 "快照链接": normalize_snapshot_url(first_value(item, "snapshot_url", "快照链接", "screenShotPath", "screenshot_path")) if SNAPSHOT_ENABLED else "",
                 "policyUrl": first_value(item, "policyUrl", "policy_url"),
                 "类型": first_value(item, "type", "素材类型") or "材料",
+                # 引用实例（逐处原文片段）：渲染层按段匹配后展示"本段用到的那段原文"
+                "citations": item.get("citations") or [],
+                # 版本与地域元数据：知识专库/来源卡可展示
+                "status": first_value(item, "status", "效力状态"),
+                "region": first_value(item, "region", "地域属性"),
                 # V2 新增文章级字段（D5 展示 / 追溯）
                 "发文字号": first_value(item, "发文字号", "doc_number", "文号"),
                 "生效日期": first_value(item, "生效日期", "effectiveDate"),
                 "失效日期": first_value(item, "失效日期", "expiryDate"),
                 "文章类型": first_value(item, "文章类型", "文章类别"),
                 "发布或实施机构": first_value(item, "发布或实施机构", "发布机关"),
+                # 素材清单的发布机关落在 issue_org：渲染层来源卡取不到前两者时兜底使用
+                "issue_org": first_value(item, "issue_org", "发布机关", "发文机关"),
                 "文件标签": first_value(item, "文件标签"),
                 # 外部联网材料标记（联网检索/宿主 WebSearch 路）：渲染层打「非官方来源」徽标
                 "非官方来源": True if item.get("非官方来源") else "",
@@ -276,6 +340,7 @@ def main() -> None:
         SNAPSHOT_ENABLED = False
     input_path = resolve_input(args.input)
     data = json.loads(input_path.read_text(encoding="utf-8"))
+    enforce_citation_gate(data)
     payload, title, answer = to_trace_payload(data)
     articles = payload.get("content", {}).get("data", {}).get("检索文章", [])
     # 2026-10-08：链接连通性检测已移除——接口返回的链接原样进报告；

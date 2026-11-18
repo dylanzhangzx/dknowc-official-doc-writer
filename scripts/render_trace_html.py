@@ -89,6 +89,17 @@ def short(text: Any, limit: int = 360) -> str:
     return value[:limit].rstrip() + "..."
 
 
+def clean_issuer(value: Any) -> str:
+    """机构名清洗：去掉接口返回的多机构串尾/内部标记（如 `A##、B##`），
+    并压缩残留分隔符。只做展示清洗，不改动原文。"""
+    text = str(value or "")
+    if not text:
+        return ""
+    text = text.replace("#", "")
+    text = re.sub(r"[、，,]{2,}", "、", text)
+    return text.strip(" 、，,；;")
+
+
 def strip_tags(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text or "")
 
@@ -252,12 +263,13 @@ def source_from_article(item: Dict[str, Any], index: int, segment: Optional[Dict
             vo.get("title"),
             "未命名来源文章",
         ),
-        # 来源卡只展示发文机构：发布或实施机构 → 发布机关。
+        # 来源卡只展示发文机构：发布或实施机构 → 发布机关 → 素材清单的 issue_org。
         # 不回退到站点/数据源名称，避免把转载网站或内部流水标签当成发文机关展示。
-        "agency": first_str(
+        "agency": clean_issuer(first_str(
             item.get("发布或实施机构"),
             item.get("发布机关"),
-        ),
+            item.get("issue_org"),
+        )),
         "date": first_str(item.get("发布日期"), item.get("date"), item.get("发布时间"), item.get("createDate"), vo.get("dateTime"), vo.get("createDate")),
         "url": first_str(item.get("sourceUrl"), item.get("source_url"), item.get("源网址"), item.get("原文链接"), item.get("url"), item.get("原文"), vo.get("sourceUrl"), vo.get("url")),
         "policy_url": first_str(item.get("policyUrl"), item.get("policy_url"), item.get("知识专库原文"), vo.get("policyUrl")),
@@ -284,7 +296,11 @@ def source_from_article(item: Dict[str, Any], index: int, segment: Optional[Dict
     source["doc_section"] = " › ".join(first_chain)
     source["chain_full"] = " › ".join(segments[0]["chain"]) if segments else ""
     # 发文字号：V2 起优先文章级「发文字号」；历史数据回退 policyFiles 匹配的「文号」
-    source["doc_number"] = first_str(item.get("发文字号"), item.get("文号"), item.get("doc_number"))
+    source["doc_number"] = first_str(item.get("发文字号"), item.get("文号"), item.get("doc_number"),
+                                     item.get("writtenText"))
+    # 引用实例：同一篇材料被正文多处引用时，每处各自的原文片段（引用对照装配而来）。
+    # 有则弹层按"本段用到的那段原文"展示，没有才回退整篇首段摘录。
+    source["citations"] = item.get("citations") or []
     # D5②：生效/失效日期与文章类型（知识专库卡片 meta 展示；无值不显示）
     source["effective_date"] = first_str(item.get("生效日期"), item.get("effectiveDate"))
     source["expiry_date"] = first_str(item.get("失效日期"), item.get("expiryDate"))
@@ -855,7 +871,7 @@ def parse_answer_blocks(answer: str, valid_ids: set, chip_map: Optional[Dict[str
     render_section_cards 在段后输出。
     """
 
-    def jb_html(cid: str) -> str:
+    def jb_html(cid: str, block_text: str = "") -> str:
         jb = chip_map.get(cid)
         if not jb:
             return ""
@@ -866,9 +882,38 @@ def parse_answer_blocks(answer: str, valid_ids: set, chip_map: Optional[Dict[str
                     f'{ARROW_SVG}<span>{btn_txt}</span></a>')
         else:
             link = ""
+        # 引用实例优先：本段正文里实际用到的那段原文（引用对照逐处交付）。
+        # 同一篇材料被多段引用时，各段只展示自己那一条，不再复用整篇首段摘录。
+        used_quotes: List[Dict[str, str]] = []
+        if block_text:
+            # 比对前去掉角标：正文段落渲染时角标会与后随标点换位（"[1]，"→"，[1]"），
+            # 而引用对照的 sentence 保留书写时的原始形态，带角标直接比会永远不命中。
+            def _flat(s: str) -> str:
+                return re.sub(r"\s+", "", re.sub(r"[\[【]\s*\d+\s*[\]】]", "", str(s or "")))
+            flat_block = _flat(block_text)
+            for cit in jb.get("citations") or []:
+                sent = _flat(cit.get("sentence"))
+                if sent and sent in flat_block:
+                    used_quotes.append(cit)
+        if used_quotes:
+            quote = ""
+            for cit in used_quotes[:3]:
+                text = str(cit.get("quote") or "").strip()
+                if not text:
+                    continue
+                usage = str(cit.get("usage") or "依据")
+                label = "可借鉴做法" if usage == "借鉴" else "原文"
+                inner = (f'<i class="jb-no">{esc(cid)}</i>'
+                         f'<span class="jb-quote-label">{label}：</span>'
+                         f'<span class="sc-excerpt">{esc(text)}</span>')
+                quote += f'<span class="jb-quote" role="button" tabindex="0">{inner}</span>'
+            segs = []
+        else:
+            segs = jb.get("segments") or []
         # 原文直达区展示标题链（多段分块，各段带链——快速人工核验的核心抓手）
-        segs = jb.get("segments") or []
-        if segs:
+        if used_quotes:
+            pass
+        elif segs:
             quote = ""
             seg_idx = -1
             for seg in segs:
@@ -920,7 +965,7 @@ def parse_answer_blocks(answer: str, valid_ids: set, chip_map: Optional[Dict[str
             if remaining[cid] > 0:
                 return ""
             if cid in chip_map:
-                return jb_html(cid)
+                return jb_html(cid, block_text)
             # 未绑定角标（无对应材料）：红色数字警示，绝不按位置猜测
             return f'<sup class="cite unresolved" data-cite="{esc(cid)}" title="核验依据 [{esc(cid)}?]">{esc(cid)}?</sup>'
 
@@ -1046,6 +1091,7 @@ def build_chip_data(sources: List[Dict[str, str]]) -> Dict[str, Dict[str, str]]:
             "dead": bool(source.get("link_dead")),
             "excerpt": (source.get("excerpt") or "").strip(),
             "segments": source.get("segments") or [],
+            "citations": source.get("citations") or [],
             "unofficial": bool(source.get("unofficial")),
         }
     return chip_map
