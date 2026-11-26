@@ -256,37 +256,42 @@ def _read_update_cache():
 
 
 def _write_update_cache(latest, download_url, download_name):
-    # 原子写（临时文件＋replace）＋0600 权限，避免半截缓存与权限放大；保留已记录的拒绝版本
+    # 直接覆盖写 + 0600 权限；保留已记录的拒绝版本。
+    # 不用「临时文件 + os.replace」：宿主会把 rename 源文件判成"删除文件"并逐次弹确认框。
+    # 缓存是纯派生数据（目录接口可随时重查），半截写入最坏只影响一次自检提示，不影响功能。
     try:
         path = _update_cache_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         old = _read_update_cache() or {}
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps({
+        path.write_text(json.dumps({
             "checked_at": time.time(),
             "latest_version": latest,
             "download_url": download_url,
             "download_name": download_name,
             "declined_version": old.get("declined_version"),
         }, ensure_ascii=False), encoding="utf-8")
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, path)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
     except Exception:
         pass
 
 
 def set_declined_version(version) -> bool:
     """记录用户拒绝的版本（原子合并写入，保留既有字段）。被拒版本不再提示，
-    目录出现更高版本时恢复提示；用户主动要求升级时不受此记录影响。"""
+    目录出现更高版本时恢复提示；用户主动要求升级时不受此记录影响。
+    同样直接覆盖写（不用临时文件＋replace），避免宿主把 rename 判成删除而弹确认框。"""
     try:
         path = _update_cache_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         data = _read_update_cache() or {}
         data["declined_version"] = str(version)
-        tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, path)
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
         return True
     except Exception:
         return False

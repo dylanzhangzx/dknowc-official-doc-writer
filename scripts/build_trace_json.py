@@ -457,11 +457,11 @@ def main() -> int:
         rm["from_selected"] = False
         recalled.append(rm)
 
-    # ③ self_check 骨架（五项待模型填写）
-    # 注意：渲染器（render_trace_html.py normalize_self_check / classify_check_value）
-    # 期望 self_check 的值为**字符串**（"通过：说明" / "未通过：说明"），不是 dict——
-    # dict 会 str() 成 "{'通过': True...}" 无法匹配"通过"前缀，导致核验单显示"未记录"。
-    # 骨架用空字符串占位，模型填写时写"通过：..."或"未通过：..."。
+    # ③ self_check 骨架（五项待模型填写，两轨验收的 Agent 轨）
+    # 每项填结构化对象：{"verdict": "pass|fail|pending", "basis": "结论依据", "evidence": ["可回查证据", …]}。
+    # 硬约束：verdict=pass 时 evidence 必须含可回查要素（材料角标 [n]／条款号／文号／日期／
+    # 文件名／GB 标准号任一），裸写「通过」或证据无要素会被渲染器按 evidence_missing 拦截；
+    # fail 否决、pending 只表示待人工复核。骨架用空字符串占位（如实显示"未记录"）。
     self_check = {k: "" for k in SELF_CHECK_ITEMS}
 
     trace = {
@@ -506,7 +506,7 @@ def main() -> int:
         "materials": len(materials),
         "recalled_materials": len(recalled),
         "citations": citations,
-        "note": "溯源 JSON 已装配。请填写 self_check 五项检查结果，再运行 check_materials.py 校验、source_note_html.py 渲染。",
+        "note": "溯源 JSON 已装配。请把 self_check 五项填成结构化结果（verdict/basis/evidence，pass 必须带可回查证据），再运行 check_materials.py 校验、source_note_html.py 渲染。",
     }, ensure_ascii=False, indent=2))
     return 0
 

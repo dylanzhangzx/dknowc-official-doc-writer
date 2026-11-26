@@ -7,7 +7,7 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并生成含正文、溯源核验报告与知识专库的产出物，帮助用户写得有依据、能复核、可交付。正式公文（15 种法定文种）可生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and produce a deliverable containing the formal content, a source-verification report and a knowledge-library view. Word documents are generated for the 15 statutory official-document types, and red-head document formatting is supported when explicitly requested by the user."
 category: "office-efficiency"
-version: "3.9.9"
+version: "3.9.10"
 author: "彩智科技"
 permissions:
   network:
@@ -36,7 +36,7 @@ secrets:
 
 ## 权限说明
 
-本 Skill 会访问 `https://open.dknowc.cn/` 用于公文范文大纲、深知可信搜索和产出物整理；访问 `https://platform.dknowc.cn/auth/#/login` 用于 MaaS 手机号验证码注册、API Key 获取和管理平台地址说明；访问 `https://platform.dknowc.cn/auth/open-api/maas/identity/v1/agent-registration-key-send` 用于携带本渠道固定通行密钥直接申请注册验证码；访问 `https://platform.dknowc.cn/maas/identity-center/maas/login/` 用于通行密钥通道不可用时读取官方 Agent 注册指引、领取注册文字题并提交答案（人工兜底时另含一次性验证页链接）；匿名访问 `https://platform.dknowc.cn/open-api/` 的公开技能目录做版本自检；仅在用户同意升级后从 `https://down.dknowc.cn/` 下载官方升级包（见「版本自检与引导升级」）。运行过程中会读取本 Skill 的规则、标准、配置和参考资料文件，并在本地写入初始化状态文件、版本自检缓存、用户授权保存的写作偏好、生成的 Word 文档、产出物 HTML 和搜索结果中间文件。MaaS 注册取 Key 成功后，会把 `DKNOWC_API_KEY` 写入本机 Key 专用配置文件（`~/.config/dknowc/api_key`，纯文本一行 Key、600 权限，不写 `~/.zshrc`）；脚本读取顺序为进程环境变量优先、缺失时自动读取该文件，历史 `~/.zshrc` 中的 Key 块仅作迁移期兜底。用户同意升级后，`update_skill.py` 会在安装目录旁生成整目录备份 zip 并就地替换安装目录（`official-docs/`、`knowledge-base/` 与 `config/` 个人配置保留）。包内凭据分两类，规则不同：**用户的检索凭证（API Key）不得硬编码、不得写入公开包**，只能通过环境变量 `DKNOWC_API_KEY` 注入或配置文件持久化，且不得在对话中展示完整内容；**渠道注册发码通行密钥属例外**——它不是用户凭证，只能对本渠道的注册发码接口申请验证码，读不到任何检索数据，按渠道各配一条、可吊销可轮换，因此随包分发；它只出现在 `scripts/register.mjs` 的请求头常量里，不打印、不进日志、不进话术、不写入工作区。除此之外包内不得出现任何凭据。
+本 Skill 会访问 `https://open.dknowc.cn/` 用于公文范文大纲、深知可信搜索和产出物整理；访问 `https://platform.dknowc.cn/auth/#/login` 用于 MaaS 手机号验证码注册、API Key 获取和管理平台地址说明；访问 `https://platform.dknowc.cn/auth/open-api/maas/identity/v1/agent-registration-key-send` 用于携带本渠道固定注册通行码直接申请注册验证码；访问 `https://platform.dknowc.cn/maas/identity-center/maas/login/` 用于注册通行码通道不可用时读取官方 Agent 注册指引、领取注册文字题并提交答案（人工兜底时另含一次性验证页链接）；匿名访问 `https://platform.dknowc.cn/open-api/` 的公开技能目录做版本自检；仅在用户同意升级后从 `https://down.dknowc.cn/` 下载官方升级包（见「版本自检与引导升级」）。运行过程中会读取本 Skill 的规则、标准、配置和参考资料文件，并在本地写入初始化状态文件、版本自检缓存、用户授权保存的写作偏好、生成的 Word 文档、产出物 HTML 和搜索结果中间文件。MaaS 注册取 Key 成功后，会把 `DKNOWC_API_KEY` 写入本机 Key 专用配置文件（`~/.config/dknowc/api_key`，纯文本一行 Key、600 权限，不写 `~/.zshrc`）；脚本读取顺序为进程环境变量优先、缺失时自动读取该文件，历史 `~/.zshrc` 中的 Key 块仅作迁移期兜底。用户同意升级后，`update_skill.py` 会在安装目录旁生成整目录备份 zip 并就地替换安装目录（`official-docs/`、`knowledge-base/` 与 `config/` 个人配置保留）。包内凭据分两类，规则不同：**用户的检索凭证（API Key）不得硬编码、不得写入公开包**，只能通过环境变量 `DKNOWC_API_KEY` 注入或配置文件持久化，且不得在对话中展示完整内容；**渠道注册通行码属例外**——它不是用户凭证，只能对本渠道的注册发码接口申请验证码，读不到任何检索数据，按渠道各配一条、可吊销可轮换，因此随包分发；它只出现在 `scripts/register.mjs` 的请求头常量里，不打印、不进日志、不进话术、不写入工作区。除此之外包内不得出现任何凭据。
 
 ## 设计模式
 
@@ -93,7 +93,7 @@ secrets:
 3. **素材清单（G2）**：基于合并产物**全量逐篇**分类，把选中清单落盘 `official-docs/input/materials_<任务>.json`（顶层 `selected` 键）；每条须带 `发布机关`、`status`（现行/历史/参考）、`region`（本地/上级/外省/全国）。禁止手工挑拣、写完正文再反查、手写 materials。分类口径与写法参考判断见 `reference/materials_pipeline.md`。
 4. **研究资料（G3，研究型/综合长篇）**：分类自检时生成初版（口径表缺口驱动补搜），用户确认素材清单后定稿，正文基于定稿写作；短公文不启用。规则见 `reference/materials_pipeline.md` 与 `reference/research_notes.md`。
 5. **写作**：按文种读取 `reference/standards/*.md`；长篇材料按 `reference/writing_method.md`《写作六步法》执行（立意→识体→谋篇→段内成文→语言→修改）；事实边界、标点、篇幅规则（只服从用户明确要求）、高风险表述、表格规则与成稿自检见 `reference/writing_rules.md`；材料进入正文见 `reference/material_usage_guidance.md`。
-6. **引用对照与产出物**：正文写完后**逐处**落盘引用对照 `official-docs/input/引用对照_<任务>.json`（每处 `[n]` 一条：原句 + 逐字原文片段 + 用途），再装配溯源 JSON → `check_materials.py` 校验（含引文逐字比对、版本效力、地域用法）→ `source_note_html.py` 渲染；命中 15 种法定公文同时生成 Word；交付前执行 `deliver_outputs.py`。完整规则见 `reference/materials_pipeline.md` 与 `reference/output_guide.md`。
+6. **引用对照与产出物**：正文写完后**逐处**落盘引用对照 `official-docs/input/引用对照_<任务>.json`（每处 `[n]` 一条：原句 + 逐字原文片段 + 用途），再装配溯源 JSON → 填写**结构化 self_check**（五项，每项 `verdict/basis/evidence`）→ `check_materials.py` 校验（含引文逐字比对、版本效力、地域用法）→ `source_note_html.py` 渲染（**两轨验收**：结构核验 ∧ AI 验收，任一不过不产出 HTML）；命中 15 种法定公文同时生成 Word；交付前执行 `deliver_outputs.py`。完整规则见 `reference/materials_pipeline.md`（第五节「两轨验收」）与 `reference/output_guide.md`。
 7. **审查**：按触发条件读 `reference/review_checklist.md`；语言复核按 `reference/anti_ai_patterns.md`，可选 `scripts/prose_lint.py`。
 
 ## 硬约束（Gate，违反即停）
@@ -101,7 +101,7 @@ secrets:
 - **G1**：搜索方案未经用户确认，不得检索。
 - **G2**：素材清单必须先落盘，正文只能基于清单写；禁止手挑素材、正文写完后反查材料、手写 materials。
 - **G3**：研究型文种缺研究资料文件时（`check_materials.py` 拦截），不得生成正文与产出物 HTML。
-- **G4**：正文 `[n]` 角标与素材清单一一对应，且每处角标都要有引用对照（`material`＝`mark`、`sentence` 是该处原文且含该角标、`quote` 逐字取自该材料且不少于 10 字；同一角标出现多次时逐处对应，不得两句套一处）；素材清单的 `status`／`region` 必填，外省材料只能标“借鉴”，`status=历史` 的材料不得作依据。校验有两道：`check_materials.py` 先查，`source_note_html.py` 渲染前再查一次（含 quote 原文比对，合并产物缺失即拒绝渲染），任一不通过都出不了 HTML。
+- **G4**：正文 `[n]` 角标与素材清单一一对应，且每处角标都要有引用对照（`material`＝`mark`、`sentence` 是该处原文且含该角标、`quote` 逐字取自该材料且不少于 10 字；同一角标出现多次时逐处对应，不得两句套一处）；素材清单的 `status`／`region` 必填，外省材料只能标“借鉴”，`status=历史` 的材料不得作依据。校验有两道：`check_materials.py` 先查，`source_note_html.py` 渲染前再查一次（含 quote 原文比对，合并产物缺失即拒绝渲染），任一不通过都出不了 HTML。**渲染即两轨验收**：`self_check` 五项必须写结构化结果（`verdict/basis/evidence`），声明"通过"的证据里没有可回查要素（角标/条款/文号/日期/文件名/GB 号）按证据不足拦截；任一轨不过都不产出 HTML。
 - **G5**：额度用尽（`quota_exhausted=true`）或检索失败：停止并如实告知，等用户确认；**禁止任何重试**，禁止擅自改用其他搜索方式。
 - **G6**：正文文号只认材料清单 `发文字号` 字段；字段为空时只写文件全称，不得从段落正文提取（`check_materials.py` 拦截）。
 - **G7**：篇幅只服从用户明确要求或模板规定。用户未提字数时，不设默认下限，按素材充分度自然收束，不得为凑字数补写背景、表态或口号；用户提出字数要求时，按用户区间校验，低于下限先补已召回事实、仍不足则交短稿并说明缺口，高于上限先压缩重复与铺垫，必保内容不得删（`check_materials.py` 仅在用户明确要求时校验）。
@@ -116,7 +116,7 @@ secrets:
 - 事实陈述只来自用户材料和可信搜索结果；模型假设只能用于结构、分析框架和建议方向，涉及具体事实须标“待核实/初步判断”，不得写成确定事实。引用标准按 `reference/writing_rules.md` 的“标准引用四查”核对。
 - 当前版本不生成 PDF；不得声称已生成 PDF。
 - 不得向用户展示完整 API Key；验证码由用户本人输入，不代输、不转发。
-- 注册默认走固定通行密钥直接发码，不需要领题作答；通行密钥是发码通行值（不是用户的检索凭证），只放请求头、不进对话与日志。通道不可用时自动回落到领题流程，此时领到的文字题由模型当场作答，不把题目发给用户、不复述答题过程；题目 token 与领题会话不进入对话、不写日志；不代做图片验证、不伪造通过结果。
+- 注册默认走固定注册通行码直接发码，不需要领题作答；注册通行码是发码通行值（不是用户的检索凭证），只放请求头、不进对话与日志。通道不可用时自动回落到领题流程，此时领到的文字题由模型当场作答，不把题目发给用户、不复述答题过程；题目 token 与领题会话不进入对话、不写日志；不代做图片验证、不伪造通过结果。
 
 ## 参考资料索引
 
@@ -139,6 +139,7 @@ secrets:
 | 语言质检（可选） | `scripts/prose_lint.py` |
 | 检索与转换脚本 | `scripts/deep_query.py`、`scripts/deep_convert.py`、`scripts/dkag_search.py`、`scripts/merge_search_results.py`、`scripts/outline_reference.py`、`scripts/extract_reference.py` |
 | 产出与交付脚本 | `scripts/build_trace_json.py`、`scripts/check_materials.py`、`scripts/source_note_html.py`、`scripts/format_document.py`、`scripts/template_generator.py`、`scripts/deliver_outputs.py` |
+| 溯源报告渲染内核（勿手改） | `scripts/render_trace_html.py` 及配套 `scripts/build_report_input.py`、`scripts/trust_digest.py`、`scripts/chart_embed.py`、`scripts/run_paths.py`；渲染配置 `config/trace_report.config.json`（品牌/通道/自检标签/两轨开关） |
 | 版本自检与引导升级 | `scripts/update_skill.py`（执行前征询与升级执行规则见「版本自检与引导升级」节） |
 
 ## 个人素材库与写作偏好

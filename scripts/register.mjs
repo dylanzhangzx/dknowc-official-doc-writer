@@ -31,16 +31,18 @@ const DEFAULT_CHANNEL = "8C8D411C-6A46-4E99-887D-87D9A1329930";
 // 字段：统计声明头的键名为 agentSource（2026-10-09 平台方确认改名，避免与 body 的
 // source 混淆），值仍读 attribution.json 的 dknowc-official-doc-writer，不受本值影响。
 const DEFAULT_SOURCE = "agent";
-// 2026-11-18 新增：固定通行密钥发码通道。平台按渠道分配一条固定通行值，直接申请验证码，
-// 不再需要「先领题再作答」。原领题路径整体保留（加方法不改方法），密钥失效即回落。
-// 通行密钥是发码通行值，不是用户的业务 API Key：只放请求头，不放 URL/query 或请求体；
+// 2026-11-18 新增：固定注册通行码发码通道。平台按渠道分配一条固定通行值，直接申请验证码，
+// 不再需要「先领题再作答」。原领题路径整体保留（加方法不改方法），注册通行码失效即回落。
+// 注册通行码是发码通行值，不是用户的业务 API Key：只放请求头，不放 URL/query 或请求体；
 // 每包固定写入本渠道的一条值。
 const REGISTRATION_KEY_SEND_URL =
   "https://platform.dknowc.cn/auth/open-api/maas/identity/v1/agent-registration-key-send";
 const REGISTRATION_KEY_HEADER = "X-MaaS-Registration-Key";
 const REGISTRATION_KEY = "So3EdPDJMf7z0MmH1zfvm6VDEQpR2EIRRsqqtnl866MrpVPl-Sj--g";
 // 发码返回的会话（SESSION / sl-session）在发码与注册之间复用，按手机号落盘。
-const REG_KEY_STATE_FILE = "maas_registration_key.json";
+const REG_KEY_STATE_FILE = "maas_registration_session.json";
+// 历史文件名：只做一次性兼容读取（读到即迁移到新文件），不删除旧文件（宿主会把 unlink 判成"删除文件"弹窗）
+const LEGACY_REG_KEY_STATE_FILE = "maas_registration_key.json";
 // 2026-10-09 注册链路改造：MaaS 客户端观测请求头（X-MaaS-*）用本 Skill 真实包名，不冒充
 // 其他客户端；Client-Version 运行时读包根 SKILL.md；Instance-Id 由服务端响应头签发后落盘
 // 回传，不自行生成（user-auth maas-1.1.6 契约）。
@@ -125,7 +127,9 @@ function readChallengeState() {
   try {
     const raw = fs.readFileSync(stateFilePath(), "utf-8");
     const st = JSON.parse(raw);
-    return st && typeof st === "object" ? st : null;
+    // 占位写（cleared）与缺字段的对象都按"没有进行中的题目"处理
+    if (!st || typeof st !== "object" || st.cleared || !st.phone) return null;
+    return st;
   } catch { return null; }
 }
 function writeChallengeState(st) {
@@ -135,8 +139,15 @@ function writeChallengeState(st) {
     return true;
   } catch { return false; }
 }
+// 清除=写占位（不删文件）：避免宿主"删除文件"弹窗；读取侧按无题目处理
 function clearChallengeState() {
-  try { fs.unlinkSync(stateFilePath()); } catch { /* 不存在时忽略 */ }
+  try {
+    fs.mkdirSync(configDir(), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(stateFilePath(), JSON.stringify({ phone: "", question: null, cleared: true, at: new Date().toISOString() }, null, 2) + "\n",
+      { encoding: "utf-8", mode: 0o600 });
+    try { fs.chmodSync(stateFilePath(), 0o600); } catch { /* 忽略 */ }
+    return true;
+  } catch { return false; }
 }
 function challengeExpired(st) {
   const exp = Number(st && st.expiresAt);
@@ -287,26 +298,40 @@ async function post(url, payload, { cookies } = {}) {
   return { body: json, requestUnknown };
 }
 
-// —— 固定通行密钥发码通道（2026-11-18）——
+// —— 固定注册通行码发码通道（2026-11-18）——
 function regKeyStatePath() {
   return path.join(configDir(), REG_KEY_STATE_FILE);
 }
 function readRegKeyState() {
-  try {
-    const st = JSON.parse(fs.readFileSync(regKeyStatePath(), "utf-8"));
-    return st && typeof st === "object" ? st : null;
-  } catch { return null; }
+  for (const name of [REG_KEY_STATE_FILE, LEGACY_REG_KEY_STATE_FILE]) {
+    try {
+      const st = JSON.parse(fs.readFileSync(path.join(configDir(), name), "utf-8"));
+      if (st && typeof st === "object" && !st.cleared) {
+        if (name !== REG_KEY_STATE_FILE) writeRegKeyState(st.phone, st.cookies || {}, st.at);
+        return st;
+      }
+    } catch { /* 不存在或不可读：试下一个 */ }
+  }
+  return null;
 }
-function writeRegKeyState(phone, cookies) {
+function writeRegKeyState(phone, cookies, at) {
   try {
     fs.mkdirSync(configDir(), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(regKeyStatePath(), JSON.stringify({ phone, cookies: cookies || {}, at: new Date().toISOString() }, null, 2) + "\n",
+    fs.writeFileSync(regKeyStatePath(), JSON.stringify({ phone, cookies: cookies || {}, at: at || new Date().toISOString() }, null, 2) + "\n",
       { encoding: "utf-8", mode: 0o600 });
+    try { fs.chmodSync(regKeyStatePath(), 0o600); } catch { /* Windows 等场景忽略 */ }
     return true;
   } catch { return false; }
 }
+// 清除=写占位（不删文件）：宿主把 unlink 判成"删除文件"会逐次弹确认框
 function clearRegKeyState() {
-  try { fs.unlinkSync(regKeyStatePath()); } catch { /* 不存在时忽略 */ }
+  try {
+    fs.mkdirSync(configDir(), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(regKeyStatePath(), JSON.stringify({ phone: "", cookies: {}, cleared: true, at: new Date().toISOString() }, null, 2) + "\n",
+      { encoding: "utf-8", mode: 0o600 });
+    try { fs.chmodSync(regKeyStatePath(), 0o600); } catch { /* 忽略 */ }
+    return true;
+  } catch { return false; }
 }
 // 发码所需会话：同一手机号、且在有效期（10 分钟）内的会话才复用（防止串号与陈旧会话）
 const REG_KEY_STATE_TTL_MS = 10 * 60 * 1000;
@@ -321,13 +346,13 @@ function regKeySessionFor(phone) {
   return st.cookies && Object.keys(st.cookies).length ? st.cookies : null;
 }
 
-// 申请发码：成功返回 {ok:true, ...}；密钥不可用返回 {fallback:true}（调用方回落到领题流程）；
+// 申请发码：成功返回 {ok:true, ...}；注册通行码不可用返回 {fallback:true}（调用方回落到领题流程）；
 // 其余按业务码分门别类，调用方转成对用户的话术与停点。
-// 密钥通道地址：生产用固定地址；显式传 --base（本机 mock/测试）时随 base 派生，
+// 注册通行码通道地址：生产用固定地址；显式传 --base（本机 mock/测试）时随 base 派生，
 // 与 --guide 同约定，避免测试误打生产接口、发出真实短信。
 function regKeySendUrl(a) {
   // 只允许生产域名或本机回环（测试）：地址可被参数改写，若不校验主机，
-  // 通行密钥会随请求发往任意地址。
+  // 注册通行码会随请求发往任意地址。
   const allowedHosts = new Set(["platform.dknowc.cn", "127.0.0.1", "localhost", "::1", "[::1]"]);
   const check = (url) => {
     let host;
@@ -336,7 +361,7 @@ function regKeySendUrl(a) {
       emit(errorPayload(
         "KEY_SEND_URL_REJECTED",
         null,
-        `密钥通道地址只允许 platform.dknowc.cn 或本机回环（测试），当前被拒：${url}`,
+        `注册通行码通道地址只允许 platform.dknowc.cn 或本机回环（测试），当前被拒：${url}`,
       ), 1);
     }
     return url;
@@ -522,9 +547,9 @@ async function main() {
     const guideUrl = a.guide && a.guide !== true ? String(a.guide) : DEFAULT_GUIDE;
     const channel = a.channel && a.channel !== true ? String(a.channel) : DEFAULT_CHANNEL;
 
-    // 先走固定通行密钥发码通道：一次请求即发码，不需要领题与作答。
-    // 密钥失效/停用或返回无法识别的业务码时回落原领题流程；限频、号码被拒、结果未确认一律停点，不回落（避免二次请求绕过频控）。
-    // --legacy：显式跳过密钥通道，仅用于平台侧的旧路径回归。
+    // 先走固定注册通行码发码通道：一次请求即发码，不需要领题与作答。
+    // 注册通行码失效/停用或返回无法识别的业务码时回落原领题流程；限频、号码被拒、结果未确认一律停点，不回落（避免二次请求绕过频控）。
+    // --legacy：显式跳过注册通行码通道，仅用于平台侧的旧路径回归。
     const useKeyChannel = !(a.legacy === true || a.legacy === "true");
     let keyFallbackReason = null;
     if (useKeyChannel) {
@@ -587,9 +612,9 @@ async function main() {
           detail: k.detail || null,
         }, 1);
       }
-      // 其余（密钥无效/停用、无法识别的业务码）：回落领题流程，原因写进后续输出便于排查
+      // 其余（注册通行码无效/停用、无法识别的业务码）：回落领题流程，原因写进后续输出便于排查
       keyFallbackReason = k.reason || null;
-      if (keyFallbackReason) console.error(`通行密钥通道未生效（${keyFallbackReason}），改走原领题流程。`);
+      if (keyFallbackReason) console.error(`注册通行码通道未生效（${keyFallbackReason}），改走原领题流程。`);
     }
 
     // 同号未过期的题直接复用：刷新题目不增加机会、不延长到期时间，也不该重复请求服务端

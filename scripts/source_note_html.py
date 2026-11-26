@@ -290,6 +290,9 @@ def to_trace_payload(data: dict) -> tuple[dict, str, str]:
                 "快照链接": normalize_snapshot_url(first_value(item, "snapshot_url", "快照链接", "screenShotPath", "screenshot_path")) if SNAPSHOT_ENABLED else "",
                 "policyUrl": first_value(item, "policyUrl", "policy_url"),
                 "类型": first_value(item, "type", "素材类型") or "材料",
+                # 渲染内核读「发布机构」展示发文机关；「来源性质」含"政策"时按政策文件处理
+                "发布机构": first_value(item, "发布或实施机构", "发布机关", "issue_org"),
+                "来源性质": first_value(item, "type", "素材类型"),
                 # 引用实例（逐处原文片段）：渲染层按段匹配后展示"本段用到的那段原文"
                 "citations": item.get("citations") or [],
                 # 版本与地域元数据：知识专库/来源卡可展示
@@ -316,22 +319,31 @@ def to_trace_payload(data: dict) -> tuple[dict, str, str]:
             })
     # 知识专库链接区已随 3.6.0 未引用召回全量展示移除：召回内容都在报告材料面板中，
     # JSON 中残留的 knowledge_bases 字段被忽略（兼容旧 JSON，不报错）。
-    content = {"data": {"检索文章": articles}}
-    payload = {"answer": answer, "question": title, "content": content}
-    if isinstance(data.get("检索记录"), list):
-        payload["检索记录"] = data.get("检索记录")
-        # 渲染入口会 unwrap 到 content 层，必须同步放进 content（与 selfCheck 同处理）
-        content["检索记录"] = data.get("检索记录")
+    # 渲染内核（1.0.2 通用输入契约）直接读顶层 materials 数组——上游由
+    # build_report_input.py 承担的"接口产物 → 通用 JSON"转换在本技能由本函数完成。
+    payload = {"answer": answer, "question": str(data.get("question") or ""), "materials": articles}
+    # 逐次调用增量（过程条"新增 N 篇 · 补充 K 段"）：检索记录按 label=搜索目的 对齐到分组行
+    searches = data.get("检索记录")
+    if isinstance(searches, list):
+        calls = []
+        for rec in searches:
+            if not isinstance(rec, dict):
+                continue
+            calls.append({
+                "label": first_value(rec, "purpose", "query"),
+                "new_articles": rec.get("new_articles") or 0,
+                "added_paragraphs": rec.get("added_paragraphs") or 0,
+            })
+        if calls:
+            payload["search_meta"] = {"calls": calls}
     # 成稿自检结果（5 项）由生成流程写入溯源 JSON；未写入时渲染器如实显示"未记录"
     self_check = data.get("self_check") or data.get("selfCheck")
     if isinstance(self_check, dict):
         payload["selfCheck"] = self_check
-        content["selfCheck"] = self_check
     # 生成流程写入的核验说明清单，用于报告底部核验方法说明
     verify_checks = data.get("verification_checks") or data.get("verificationChecks")
     if isinstance(verify_checks, list) and verify_checks:
         payload["verificationChecks"] = [str(x) for x in verify_checks]
-        content["verificationChecks"] = [str(x) for x in verify_checks]
     return payload, title, answer
 
 
@@ -367,11 +379,17 @@ def main() -> None:
         raise SystemExit(1)
     output_path = safe_output(args.output, title)
     renderer = load_renderer()
+    # 载入本技能的渲染配置（品牌/通道/自检标签/Agent 轨开关/官方信源白名单）。
+    # 内核缺省值通用，缺配置文件时按默认渲染，不阻断。
+    config_path = SKILL_ROOT / "config" / "trace_report.config.json"
+    if config_path.is_file():
+        renderer.apply_config(renderer.load_config(str(config_path)))
     # 2026-10-08：溯源报告必须含"完整的原问题"才能独立使用。
     # 仅取溯源 JSON 顶层的 question（用户原话全文，由 build_trace_json --question 写入）；
     # 历史 JSON 未带该字段时传空（渲染端不显示该行）——不得用报告标题冒充原问题。
     question = str(data.get("question") or "").strip()
-    rendered = renderer.render_html(payload, title, answer_override=answer, question_override=question)
+    rendered = renderer.render_html(payload, title, answer_override=answer, question_override=question,
+                                    snapshot_enabled=SNAPSHOT_ENABLED)
     output_path.write_text(rendered, encoding="utf-8")
     print(f"产出物 HTML（正文/溯源核验报告/知识专库 三页）已生成: {output_path}")
 

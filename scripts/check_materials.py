@@ -539,13 +539,33 @@ def _norm_key(k: str) -> str:
     return re.sub(r"\s+", "", str(k))
 
 
-def check_self_check(sc_raw) -> list[str]:
-    """校验 self_check 五项齐全（渲染层能读到、不出现'未记录'）。
+def _verdict_of(item) -> str:
+    """把一项自检的结论归一为 pass/fail/pending/none（口径与渲染内核一致）。"""
+    if isinstance(item, dict):
+        raw = item.get("verdict") or item.get("结论") or item.get("status")
+    else:
+        raw = item
+    text = str(raw or "").strip().lower()
+    if not text:
+        return "none"
+    for prefix in ("pending", "待定", "待确认", "待人工复核", "待复核"):
+        if text.startswith(prefix):
+            return "pending"
+    for prefix in ("fail", "未通过", "不通过", "不合格", "false", "否"):
+        if text.startswith(prefix):
+            return "fail"
+    for prefix in ("pass", "已通过", "通过", "合格", "ok", "true", "是"):
+        if text.startswith(prefix):
+            return "pass"
+    return "none"
 
-    兼容三种值形态（与 render_trace_html.py classify_check_value 一致）：
-      ① 字符串 "通过：说明" / "未通过：说明"（渲染器主格式，build_trace_json 骨架即此）
-      ② dict {"通过": true, "说明": "..."}
-      ③ 简单字符串 "通过" / "未通过"
+
+def check_self_check(sc_raw) -> list[str]:
+    """校验 self_check 五项齐全且符合两轨验收结构（Agent 轨提交契约）。
+
+    主格式（与渲染内核一致）：每项 {"verdict": "pass|fail|pending", "basis": "…", "evidence": ["…"]}；
+    声明 pass 必须给非空 evidence（证据要素由渲染内核把关，此处先拦空证据）。
+    兼容旧字符串 "通过：说明" / "未通过：说明"（裸"通过"无证据，按内核口径也会被拦）。
     兼容两种键名写法：'无AI味' 与 '无 AI 味'。
     """
     errors = []
@@ -559,11 +579,32 @@ def check_self_check(sc_raw) -> list[str]:
         for k in SELF_CHECK_ITEMS:
             item = next((sc_raw[kk] for kk in sc_raw if _norm_key(kk) == _norm_key(k)), None)
             if item is None or (isinstance(item, str) and not item.strip()):
-                errors.append(f"self_check[{k}] 为空（渲染层会显示'未记录'，请写入'通过：说明'或'未通过：说明'）")
-            elif isinstance(item, dict) and "通过" not in item and "passed" not in item and "pass" not in item:
-                errors.append(f"self_check[{k}] 缺'通过/passed'字段")
-            elif isinstance(item, str) and not any(p in item for p in ("通过", "未通过", "pass", "fail")):
-                errors.append(f"self_check[{k}] 值未标明'通过/未通过'（渲染层按'未记录'处理）")
+                errors.append(f"self_check[{k}] 为空（请按两轨验收契约写 {{verdict, basis, evidence}}）")
+                continue
+            verdict = _verdict_of(item)
+            if verdict == "none":
+                errors.append(f"self_check[{k}] 结论无法识别（verdict 须为 pass/fail/pending，或以'通过/未通过/待复核'开头）")
+                continue
+            evidence = ""
+            if isinstance(item, dict):
+                ev = item.get("evidence") or item.get("证据")
+                if isinstance(ev, (list, tuple)):
+                    evidence = "；".join(str(x).strip() for x in ev if str(x).strip())
+                else:
+                    evidence = str(ev or "").strip()
+            else:
+                # 旧字符串写法：证据 = 去掉"通过：/未通过：/待复核："等结论前缀后的说明；
+                # 裸"通过"剥完前缀为空，与内核口径一致按证据不足拦
+                text = str(item).strip()
+                lowered = text.lower()
+                for prefix in ("pending", "pass", "fail", "通过", "已通过", "未通过",
+                               "不通过", "不合格", "合格", "待复核", "待定", "待确认"):
+                    if lowered.startswith(prefix):
+                        rest = text[len(prefix):].lstrip("：:，,、 ").strip()
+                        evidence = rest
+                        break
+            if verdict == "pass" and not evidence:
+                errors.append(f"self_check[{k}] 声明通过但未给 evidence 证据（裸'通过'会被渲染器按证据不足拦截）")
     elif isinstance(sc_raw, list):
         keys = {_norm_key(str(x.get("name") or x.get("项") or "")) for x in sc_raw if isinstance(x, dict)}
         missing = [k for k in SELF_CHECK_ITEMS if _norm_key(k) not in keys]

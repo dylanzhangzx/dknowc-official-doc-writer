@@ -70,8 +70,8 @@ skills.sh 版默认使用：
 node scripts/register.mjs challenge --phone <手机号>
 ```
 
-- **默认走固定通行密钥通道**：`challenge` 携带本渠道固定通行密钥直接申请发码，**不需要领题作答**。成功时退出 0、`code="SMS_SENT"`、`flow="key"`，直接等用户提供 6 位验证码；限频返回 `SMS_RATE_LIMIT`（带剩余秒数）、号码被拒返回 `SMS_REQUEST_REJECTED`、结果未确认返回 `RESULT_UNKNOWN`，均按 `user_message` 停点处理。
-- **通行密钥失效或通道不可用**：自动回落原领题流程，输出带 `keyFallback` 原因字段，`flow` 变为 `agent-text` 或 `legacy`，对用户等价。
+- **默认走固定注册通行码通道**：`challenge` 携带本渠道固定注册通行码直接申请发码，**不需要领题作答**。成功时退出 0、`code="SMS_SENT"`、`flow="key"`，直接等用户提供 6 位验证码；限频返回 `SMS_RATE_LIMIT`（带剩余秒数）、号码被拒返回 `SMS_REQUEST_REJECTED`、结果未确认返回 `RESULT_UNKNOWN`，均按 `user_message` 停点处理。
+- **注册通行码失效或通道不可用**：自动回落原领题流程，输出带 `keyFallback` 原因字段，`flow` 变为 `agent-text` 或 `legacy`，对用户等价。
 
 第 1 步（回落时），领题：
 
@@ -120,7 +120,7 @@ https://platform.dknowc.cn/auth/#/login
 https://open.dknowc.cn/open-api/maas/dependable/v2/search
 ```
 
-用户检索凭证（API Key）只能通过环境变量 `DKNOWC_API_KEY` 注入或本机专用配置文件（`~/.config/dknowc/api_key`）持久化，不得硬编码、不得写入公开包；渠道注册发码通行密钥是例外（只用于申请注册验证码、读不到检索数据、按渠道可吊销），见 `scripts/register.mjs`。脚本读取顺序为进程环境变量优先、缺失时自动读取配置文件，历史 `~/.zshrc` 中的 Key 块仅作迁移期兜底，无需重启宿主。
+用户检索凭证（API Key）只能通过环境变量 `DKNOWC_API_KEY` 注入或本机专用配置文件（`~/.config/dknowc/api_key`）持久化，不得硬编码、不得写入公开包；渠道注册通行码是例外（只用于申请注册验证码、读不到检索数据、按渠道可吊销），见 `scripts/register.mjs`。脚本读取顺序为进程环境变量优先、缺失时自动读取配置文件，历史 `~/.zshrc` 中的 Key 块仅作迁移期兜底，无需重启宿主。
 
 ## 交付形态
 
@@ -133,7 +133,7 @@ https://open.dknowc.cn/open-api/maas/dependable/v2/search
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.9.9`。
+当前 skills.sh Public 版基于 `3.9.10`。
 
 检索通道：统一走脚本通道（`deep_query.py` / `dkag_search.py` / `outline_reference.py`，需 API Key）。当前版本 MCP「深知可信工作台」通道暂未启用。
 

@@ -48,13 +48,37 @@ python3 scripts/build_trace_json.py <素材清单> <正文> <合并产物> --tit
 python3 scripts/check_materials.py <溯源JSON> <合并产物>
 ```
 
-`build_trace_json.py` 会把每处引用挂到对应材料（`materials[].citations`），渲染时弹层展示的就是“这一段用到的那段原文”，不再复用整篇首段摘录。
+`build_trace_json.py` 会把每处引用挂到对应材料（`materials[].citations`），作为逐字校验与逐处对应的数据底座；报告弹层展示该材料的原文原段（含被引用段落与章节位置），供逐句比对。
 
 ## 四、溯源 JSON 装配与校验
 
-产出物 HTML 必须按 `reference/search_guide.md` 的固定流程生成：**用 `scripts/build_trace_json.py` 从"素材清单 + 正文（带角标）"装配溯源 JSON 到 `official-docs/input/标题_溯源核验报告.json`**（materials 按正文角标序对应素材清单、recalled_materials 自动取清单未引用部分 + 合并产物未选部分、self_check 骨架待填），再调用 `python3 scripts/source_note_html.py ...` 输出产出物 HTML（正文 / 溯源核验报告 / 知识专库 三页）。**用户原问题全文必须写入溯源 JSON 的 `question`；多行/长 prompt 先落盘，用 `--question-file` 传入，禁止只传首行**（只传首行会导致报告页“原问题”丢失其余要求）。**字段契约**：溯源 JSON 必须包含 `document_content`（带 `[n]` 角标）、`materials`（全量引用材料，含标准字段）、`recalled_materials`（全部未引用召回材料，不得留空）、`self_check`（五项检查结果如实写入，**每项值写 `"通过：<说明>"` 或 `"未通过：<说明>"` 字符串**——渲染器按字符串解析，写成 dict 会导致核验单五项"未记录"）；生成 HTML 前必须运行 `python3 scripts/check_materials.py <溯源JSON> <合并产物JSON>` 校验（材料来源可回溯、字段完整、角标一一对应、recalled 非空），**校验通过后才允许调用渲染脚本**。`document_content` 必须在关键结论后标注 `[1]`、`[2]` 等角标并逐条对应 `materials`——脚本会校验，正文无角标时拒绝生成并报错，必须修正 JSON 后重跑，不得省略角标直接交付。不得由模型手写完整 HTML，不得自行拼接 `<a>`、`onclick`、按钮、卡片或页面样式。
+产出物 HTML 必须按 `reference/search_guide.md` 的固定流程生成：**用 `scripts/build_trace_json.py` 从"素材清单 + 正文（带角标）"装配溯源 JSON 到 `official-docs/input/标题_溯源核验报告.json`**（materials 按正文角标序对应素材清单、recalled_materials 自动取清单未引用部分 + 合并产物未选部分、self_check 骨架待填），再调用 `python3 scripts/source_note_html.py ...` 输出产出物 HTML（正文 / 溯源核验报告 / 知识专库 三页）。**用户原问题全文必须写入溯源 JSON 的 `question`；多行/长 prompt 先落盘，用 `--question-file` 传入，禁止只传首行**（只传首行会导致报告页“原问题”丢失其余要求）。**字段契约**：溯源 JSON 必须包含 `document_content`（带 `[n]` 角标）、`materials`（全量引用材料，含标准字段）、`recalled_materials`（全部未引用召回材料，不得留空）、`self_check`（五项检查结果按**两轨验收的结构化契约**写入，见第五节——每项 `{verdict, basis, evidence}`，裸写"通过"会被拦截）；生成 HTML 前必须运行 `python3 scripts/check_materials.py <溯源JSON> <合并产物JSON>` 校验（材料来源可回溯、字段完整、角标一一对应、recalled 非空），**校验通过后才允许调用渲染脚本**。`document_content` 必须在关键结论后标注 `[1]`、`[2]` 等角标并逐条对应 `materials`——脚本会校验，正文无角标时拒绝生成并报错，必须修正 JSON 后重跑，不得省略角标直接交付。不得由模型手写完整 HTML，不得自行拼接 `<a>`、`onclick`、按钮、卡片或页面样式。
 
-## 五、源网址字段
+## 五、两轨验收（报告合格线）
+
+产出物 HTML 的合格判定是**两轨合流**：**结构核验（脚本轨）∧ AI 验收（Agent 轨）**。任一轨不过，渲染器直接退出、**不产出 HTML**——交付物只有"已核验"一种形态；发现问题就修正后重跑，不是把带问题的报告交给用户。
+
+**脚本轨只判结构**（不做内容判断）：正文每个角标都绑定到材料、每条正文依据有可展开的原文摘录、不可引用材料不作依据；引用逐字比对、版本效力与地域用法由第三节引用对照与 `check_materials.py` 兜住。数字、标准号、地域、缺席内容、金额对象、措辞等**内容类判断全部归 AI 验收**，脚本不据此判红。
+
+**Agent 轨（AI 验收）**：`self_check` 五项（`事实有据` / `结构完整` / `无占位残留` / `无AI味` / `格式合规`）逐项按结构化契约提交：
+
+```json
+"self_check": {
+  "事实有据": {"verdict": "pass", "basis": "关键结论逐条对照素材清单核过",
+               "evidence": ["[1] 每千人口托位数 4.5 个出自该文件第二段", "成文日期 2026-11 与最新文件一致"]},
+  "格式合规": {"verdict": "pending", "basis": "发文字号待正式编号后回填", "evidence": ["文号 字〔2026〕1 号留空待编"]}
+}
+```
+
+硬约束（违反即被渲染器拦截，报告出不来）：
+
+1. **键名只用这五个中文键**，英文键与"备注"等额外键都不构成核验项。
+2. **每项必须给 `verdict`（pass/fail/pending）+ `basis`（结论依据）+ `evidence`（证据数组）**。
+3. **证据必须可回查**：`evidence` 里至少要有材料角标 `[n]`／条款号（第X条）／发文字号（〔2026〕X号）／日期／文件名／GB 标准号等任一要素——声明"通过"但证据里没有这些要素，按结构违约（证据不足）拦截，**裸写"通过"同样拦截**。
+4. **`fail` 是否决**：先解决问题再出报告；**`pending` 只表示待人工复核**，可出报告但如实标注，不算未通过。
+5. **AI 验收按"事实有据"实质判断**：逐条对照素材清单核对其撑没撑住正文表述，不得只做字面搜索或全填 pass。自检发现未闭环项应先补搜闭环，补不到才停下与用户确认，不得带缺口直接生成报告。
+
+## 六、源网址字段
 
 整理 `materials` 时，凡来自深知可信搜索的材料，必须将原始结果中的 `源网址` 原样写入 `source_url`；不得只写规范化后的文章标题，再依赖标题反查网址。若接口未返回 `源网址`，该材料不显示原文链接；不得猜测、补造或用搜索接口地址代替。
 
