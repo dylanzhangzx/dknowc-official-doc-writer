@@ -20,8 +20,9 @@ self_check / recalled_materials / 标准字段，导致核验报告单多项"未
   python3 scripts/check_materials.py <溯源JSON> <合并产物JSON>
   python3 scripts/check_materials.py --list-fields <溯源JSON>   # 只打印字段清单，不校验
 
-通过输出 {"ok": true, ...}；失败输出 {"ok": false, "errors": [...]} 并以非 0 退出码结束，
-阻断后续渲染（模型必须修正溯源 JSON 后重跑）。
+通过输出 {"ok": true, ...} 且末行含 [GATE-PASS] 标记；失败输出 {"ok": false, "errors": [...]}
+并以非 0 退出码结束，阻断后续渲染（模型必须修正溯源 JSON 后重跑）。
+成功判据 = 退出码 0 且输出含 [GATE-PASS]（Windows 的 python3 空壳零输出，不得当作通过）。
 """
 
 from __future__ import annotations
@@ -734,6 +735,8 @@ def main() -> int:
     if warnings:
         result["warnings"] = warnings
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    # 跨平台闸门标记：判据 = 退出码 0 且输出含 [GATE-PASS]（零输出≠通过）
+    print("[GATE-PASS] check_materials: 校验通过")
     return 0
 
 

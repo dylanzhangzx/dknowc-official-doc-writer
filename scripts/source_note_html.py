@@ -391,7 +391,14 @@ def main() -> None:
     rendered = renderer.render_html(payload, title, answer_override=answer, question_override=question,
                                     snapshot_enabled=SNAPSHOT_ENABLED)
     output_path.write_text(rendered, encoding="utf-8")
-    print(f"产出物 HTML（正文/溯源核验报告/知识专库 三页）已生成: {output_path}")
+    print(f"[GATE-PASS] source_note_html: 产出物 HTML（正文/溯源核验报告/知识专库 三页）已生成: {output_path}")
+    # 标记语义边界：本标记只表示"HTML 生成成功（两轨门禁已按提交内容通过）"。
+    # AI 验收（self_check）未提交时内核按"未记录"放行，这里如实提醒，防标记被读作"AI 验收已通过"。
+    sc = data.get("self_check") or {}
+    filled = isinstance(sc, dict) and any(str(v).strip() for v in sc.values())
+    if not filled:
+        print("提示：溯源 JSON 未填写 self_check（AI 验收未提交），核验单五项将显示“未记录”——"
+              "正式交付前应完成五项结构化自检并回填后重渲染。", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -436,7 +436,12 @@ def main():
     # checked=false（网络不可达/停用/渠道除外/reason=declined）时
     # 不向用户提及版本话题，直接继续原任务。
     result["update"] = check_update()
+    # 跨平台闸门标记：Windows 的 python3 空壳不会执行本脚本，零输出≠就绪。
+    # 判据 = 退出码 0 且输出含 [GATE-PASS]（见 SKILL.md「命令约定（跨平台）」）。
+    result["gate_pass"] = bool(result.get("ready"))
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    if result["gate_pass"]:
+        print("[GATE-PASS] initialize: 环境就绪")
 
 
 if __name__ == "__main__":

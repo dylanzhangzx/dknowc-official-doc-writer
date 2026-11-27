@@ -7,7 +7,7 @@ description: "深知公文写作，是面向单位办公室、综合岗、文秘
 description_zh: "深知公文写作，是由北京彩智科技有限公司旗下“深知可信智能”提供的正式材料写作助手，准确、规范地完成企事业单位与政府机关等场景下的文档编写需求，所有依据或参考材料，都全程可溯源到权威部门发布的规范性文件。本技能用于公文写作、正式文书起草、汇报材料整理、讲话稿撰写、工作总结和方案报告生成，帮助用户把零散想法、会议记录、工作素材、调研资料或初稿整理成结构清楚、表达稳妥、逻辑完整、可直接修改使用的正式文稿。本技能还能严格按公文相关国家标准，支持通知、请示、报告、函、复函、批复、会议纪要、通报、通告、公告、意见、方案、总结、管理办法、汇报材料、发言稿、讲话稿、调研报告、经验材料等常见文种和工作材料。依托深知可信搜索，获取准确有效的法规政策依据、行业信息与数据、标准规范和案例参考，并生成含正文、溯源核验报告与知识专库的产出物，帮助用户写得有依据、能复核、可交付。正式公文（15 种法定文种）可生成 Word 文档；并可按用户明确要求自动生成红头文件。"
 description_en: "dknowc official doc writer is a formal-document writing Skill provided by dknowc Trusted Intelligence under Beijing Caizhi Technology Co., Ltd. It helps users draft, rewrite, polish, review and generate structured workplace documents, including official documents, formal letters, reports, meeting minutes, summaries, plans, speeches, research reports and other business materials. When evidence, data, standards or reference cases are needed, it can use dknowc Trusted Search to retrieve traceable materials from authoritative sources and produce a deliverable containing the formal content, a source-verification report and a knowledge-library view. Word documents are generated for the 15 statutory official-document types, and red-head document formatting is supported when explicitly requested by the user."
 category: "office-efficiency"
-version: "3.9.10"
+version: "3.9.11"
 author: "彩智科技"
 permissions:
   network:
@@ -55,6 +55,12 @@ secrets:
 - **不需要搜索的任务**：只要 `python3`、`python_docx`、`requests` 就绪即可继续，不要求配置 Key、不引导注册。
 - **需要搜索但未配置**（`api_key_configured=false` / `search_ready=false`）：暂停原任务，按 `reference/initialization.md` 引导开通；**引导前不得输出任何“已核实/已查到”类政策内容**，先讲价值再提手机号。
 - 依赖缺失、Key 判定、注册流程、验证码与密钥安全红线：完整规则见 `reference/initialization.md`；话术见 `reference/onboarding_scripts.md`。
+
+## 命令约定（跨平台）
+
+- 文档统一以 `python3 scripts/xxx.py` 书写命令，macOS/Linux 直接可用。**Windows 注意**：`python3` 是微软商店的应用执行别名（占位符），运行结果为零输出、零报错、拿不到退出码——此时解释器根本没有执行，**必须改用 `python`（或 `py`）重新运行**，不得把零输出当作成功。
+- 关键闸门脚本（`initialize.py`、`check_materials.py`、`source_note_html.py`）成功时输出含统一标记 **`[GATE-PASS]`**。判据是**"退出码 0 且输出含 [GATE-PASS]"**，缺一即视为未通过：零输出、报错、无标记都不得当作通过，必须换命令重跑或修正输入后重跑。
+- 本节约定覆盖全部 reference 文档中的 `python3` 命令与闸门判据，不逐处重复标注。
 
 ## 版本自检与引导升级（initialize 输出 `update` 字段）
 

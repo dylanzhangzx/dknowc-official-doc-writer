@@ -133,7 +133,7 @@ https://open.dknowc.cn/open-api/maas/dependable/v2/search
 
 ## 版本说明
 
-当前 skills.sh Public 版基于 `3.9.10`。
+当前 skills.sh Public 版基于 `3.9.11`。
 
 检索通道：统一走脚本通道（`deep_query.py` / `dkag_search.py` / `outline_reference.py`，需 API Key）。当前版本 MCP「深知可信工作台」通道暂未启用。
 
